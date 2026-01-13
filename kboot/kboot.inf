@@ -1,0 +1,58 @@
+## @file
+#  Brief Description of UEFI MyHelloWorld
+#
+#  Detailed Description of UEFI MyWizardDriver
+#
+#  Copyright for UEFI  MyHelloWorld
+#
+#  License for UEFI  MyHelloWorld
+#
+##
+
+[Defines]
+  INF_VERSION                    = 1.90
+  BASE_NAME                      = kboot
+  FILE_GUID                      = 7c65f3cf-b379-415d-9161-1dc597a41fb0
+  MODULE_TYPE                    = UEFI_APPLICATION
+  VERSION_STRING                 = 1.0
+  ENTRY_POINT                    = uefi_main
+#
+# The following information is for reference only and not required by the build tools.
+#
+#  VALID_ARCHITECTURES           = IA32 X64 IPF EBC Etc...
+#
+
+[BuildOptions]
+  GCC:*_*_*_CC_FLAGS = -I$(WORKSPACE)/kboot/include
+
+[Sources]
+  src/main.c
+  src/log.c
+  src/menu.c
+  src/fs.c
+  src/loader.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+  MdeModulePkg/MdeModulePkg.dec
+
+[LibraryClasses]
+  BmpSupportLib
+  FileHandleLib
+  UefiApplicationEntryPoint
+  UefiLib
+
+[Guids]
+
+[Ppis]
+
+[Protocols]
+  gEfiLoadedImageProtocolGuid
+  gEfiSimpleFileSystemProtocolGuid
+  gEfiBlockIoProtocolGuid
+  gEfiPartitionInfoProtocolGuid
+  gEfiGraphicsOutputProtocolGuid
+
+[FeaturePcd]
+
+[Pcd]

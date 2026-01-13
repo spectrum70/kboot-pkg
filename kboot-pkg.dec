@@ -1,0 +1,11 @@
+# KBOOT package dec file
+# (C) 2026, Kernelspace
+
+[Defines]
+  DEC_SPECIFICATION = 0x0001001B  # Version 1.27 for 2026
+  PACKAGE_NAME = kboot-pkg
+  PACKAGE_GUID = 34bc9830-0db4-4162-8cee-6d4f4ad39128
+  PACKAGE_VERSION = 0.1
+
+[Includes]
+  Include
