@@ -23,7 +23,7 @@
 #
 
 [BuildOptions]
-  GCC:*_*_*_CC_FLAGS = -I$(WORKSPACE)/kboot/include
+  GCC:*_*_*_CC_FLAGS = -I$(WORKSPACE)/kboot-pkg/kboot/include
 
 [Sources]
   src/main.c
@@ -38,6 +38,7 @@
 
 [LibraryClasses]
   BmpSupportLib
+  DxeServiceLib
   FileHandleLib
   UefiApplicationEntryPoint
   UefiLib

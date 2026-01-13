@@ -5,4 +5,4 @@ License: GPL2
 
 2026 (C), Kernelspace
 
-credits; angelo@kernel-space.org
+Credits; angelo@kernel-space.org
