@@ -151,7 +151,7 @@ EFI_STATUS menu_exec(IN EFI_HANDLE img_handle)
 
 	status = menu_draw_image(bmp_data, bmp_size);
 	if (EFI_ERROR(status)) {
-		err(L"cannot display bitmap");
+		err(L"cannot display bitmap, status = %d", status);
 	}
 
 	while (entries[i++].device_handle != 0)
