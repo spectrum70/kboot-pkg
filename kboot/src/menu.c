@@ -65,7 +65,7 @@ EFI_STATUS menu_draw_image(IN VOID *bmp_data, IN UINTN bmp_size)
         return status;
 }
 
-EFI_STATUS menu_load_embedded_bitmap(OUT VOID **bmp_data, OUT UINTN *bmp_size)
+EFI_STATUS menu_load_bitmap(OUT VOID **bmp_data, OUT UINTN *bmp_size)
 {
 	return fs_load_bmp(L"\\EFI\\kboot\\images\\kboot.bmp", bmp_data, bmp_size);
 }
@@ -144,7 +144,7 @@ EFI_STATUS menu_exec(IN EFI_HANDLE img_handle)
 		return status;
 	}
 
-	status = menu_load_embedded_bitmap(&bmp_data, &bmp_size);
+	status = menu_load_bitmap(&bmp_data, &bmp_size);
 	if (EFI_ERROR(status)) {
 		err(L"bitmap not found, status = %d", status);
 	}
