@@ -98,7 +98,7 @@ VOID menu_display(struct fs_file_details entries[MAX_BOOT_ENTRIES])
 	gST->ConOut->SetCursorPosition(gST->ConOut, 0, MENU_START_ROW);
 
 	gST->ConOut->SetAttribute(gST->ConOut, EFI_TEXT_ATTR(EFI_YELLOW, EFI_BLACK));
-	Print(L"kboot v." version "\n");
+	Print(L"kboot v." version " - (C) 2026, Kernelspace\n\n");
 
 	while (entries[i].device_handle) {
 		CHAR16 *name;
@@ -156,6 +156,8 @@ EFI_STATUS menu_exec(IN EFI_HANDLE img_handle)
 
 	while (entries[i++].device_handle != 0)
 		total_entries++;
+
+	gST->ConOut->SetCursorVisible (gST->ConOut, FALSE);
 
 	for(;;) {
 		menu_display(entries);
