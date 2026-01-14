@@ -71,8 +71,6 @@ EFI_STATUS EFIAPI fs_find_boot_entry(IN EFI_HANDLE *handle_root,
                		StrCatS(ffd.path_name, MAX_PATH_NAME, f_info->FileName);
 
              		entries[entry++] = ffd;
-
-               		dbg(__func__, L"add path_name %s", ffd.path_name);
          	}
            	status = FileHandleFindNextFile(boot_dir, f_info,
             					&no_more_files);
@@ -147,7 +145,6 @@ EFI_STATUS EFIAPI fs_find_mbr_linux_entries(
         	if (part_info->Type == PARTITION_TYPE_MBR) {
          		if (part_info->Info.Mbr.OSIndicator ==
            			MBR_LINUX_NATIVE) {
-              			dbg(__func__, L"looking on disk %d", i);
                   		status = fs_look_for_linux_images(handles[i],
                                                                   entries);
                   		if (status != EFI_SUCCESS)
