@@ -26,6 +26,7 @@
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/UefiLib.h>
 #include <Protocol/GraphicsOutput.h>
+#include <Protocol/SimpleTextOut.h>
 
 #include "log.h"
 #include "fs.h"
@@ -116,6 +117,10 @@ VOID menu_display(struct fs_file_details entries[MAX_BOOT_ENTRIES])
 
 		i++;
 	}
+	Print(L"\n");
+
+	/* Hide the cursor now */
+	gST->ConOut->SetCursorPosition(gST->ConOut, 0, 0);
 }
 
 EFI_STATUS menu_read_key(OUT EFI_INPUT_KEY *key)
@@ -156,8 +161,6 @@ EFI_STATUS menu_exec(IN EFI_HANDLE img_handle)
 
 	while (entries[i++].device_handle != 0)
 		total_entries++;
-
-	gST->ConOut->SetCursorVisible (gST->ConOut, FALSE);
 
 	for(;;) {
 		menu_display(entries);
