@@ -11,6 +11,6 @@ struct fs_file_details {
 
 EFI_STATUS fs_get_boot_entries(IN EFI_HANDLE img_handle,
 		IN struct fs_file_details entries[MAX_BOOT_ENTRIES]);
-
+EFI_STATUS fs_load_bmp(IN CHAR16 *name, OUT VOID **buffer, OUT UINTN *size);
 
 #endif /* fs_h */

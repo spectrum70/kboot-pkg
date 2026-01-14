@@ -226,4 +226,37 @@ EFI_STATUS fs_get_boot_entries(IN EFI_HANDLE efi_handle,
 	/* TO DO, try gpt */
 
 	return EFI_SUCCESS;
+}
+
+EFI_STATUS fs_load_bmp(IN CHAR16 *name, OUT VOID **buffer, OUT UINTN *size)
+{
+ 	EFI_STATUS  status;
+  	EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *fs;
+   	EFI_FILE_PROTOCOL *root, *file;
+    	UINTN file_info_size = 0;
+     	EFI_FILE_INFO *file_info = NULL;
+
+      	status = gBS->LocateProtocol(&gEfiSimpleFileSystemProtocolGuid,
+     				     NULL, (VOID**)&fs);
+     	if (EFI_ERROR(status))
+     		return status;
+
+      	status = fs->OpenVolume(fs, &root);
+       	status = root->Open(root, &file, name, EFI_FILE_MODE_READ, 0);
+        if (EFI_ERROR(status))
+        	return status;
+
+        status = file->GetInfo(file, &gEfiFileInfoGuid, &file_info_size, NULL);
+        if (status == EFI_BUFFER_TOO_SMALL) {
+        	file_info = AllocatePool(file_info_size);
+         	file->GetInfo(file, &gEfiFileInfoGuid, &file_info_size, file_info);
+          	*size = (UINTN)file_info->FileSize;
+           	*buffer = AllocatePool(*size);
+         	status = file->Read(file, size, *buffer);
+        }
+
+        file->Close(file);
+        root->Close(root);
+
+        return status;
  }

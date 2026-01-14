@@ -6,9 +6,9 @@
   PLATFORM_GUID                  = 9e03e247-939c-4593-bac2-71b9e8986ed9
   PLATFORM_VERSION               = 0.1
   DSC_SPECIFICATION              = 0x0001001C  # Version 1.28
+  OUTPUT_DIRECTORY               = Build/kboot-pkg
   SUPPORTED_ARCHITECTURES        = IA32|X64
   BUILD_TARGETS                  = DEBUG|RELEASE|NOOPT
-  FLASH_DEFINITION		 = kboot-pkg/kboot-pkg.fdf
 
 [LibraryClasses]
   DebugLib|MdePkg/Library/BaseDebugLibNull/BaseDebugLibNull.inf
@@ -38,20 +38,3 @@
 
 [Components]
   kboot-pkg/kboot/kboot.inf
-  MdeModulePkg/Core/Dxe/DxeMain.inf {
-    <LibraryClasses>
-      # Override the global HobLib mapping for the DXE Core specifically
-      CpuExceptionHandlerLib|MdeModulePkg/Library/CpuExceptionHandlerLibNull/CpuExceptionHandlerLibNull.inf
-      DebugAgentLib|MdeModulePkg/Library/DebugAgentLibNull/DebugAgentLibNull.inf
-      DxeCoreEntryPoint|MdePkg/Library/DxeCoreEntryPoint/DxeCoreEntryPoint.inf
-      DxeServicesLib|MdePkg/Library/DxeServicesLib/DxeServicesLib.inf
-      ExtractGuidedSectionLib|MdePkg/Library/DxeExtractGuidedSectionLib/DxeExtractGuidedSectionLib.inf
-      HobLib|MdePkg/Library/DxeCoreHobLib/DxeCoreHobLib.inf
-      ImagePropertiesRecordLib|MdeModulePkg/Library/ImagePropertiesRecordLib/ImagePropertiesRecordLib.inf
-      OrderedCollectionLib|MdePkg/Library/BaseOrderedCollectionRedBlackTreeLib/BaseOrderedCollectionRedBlackTreeLib.inf
-      PeCoffGetEntryPointLib|MdePkg/Library/BasePeCoffGetEntryPointLib/BasePeCoffGetEntryPointLib.inf
-      MemoryAllocationLib|MdeModulePkg/Library/BaseMemoryAllocationLibNull/BaseMemoryAllocationLibNull.inf
-      PeCoffExtraActionLib|MdePkg/Library/BasePeCoffExtraActionLibNull/BasePeCoffExtraActionLibNull.inf
-      PeCoffLib|MdePkg/Library/BasePeCoffLib/BasePeCoffLib.inf
-      ReportStatusCodeLib|MdePkg/Library/BaseReportStatusCodeLibNull/BaseReportStatusCodeLibNull.inf
-  }

@@ -22,7 +22,6 @@
 #include <Pi/PiFirmwareFile.h>
 
 #include <Library/BmpSupportLib.h>
-#include <Library/DxeServicesLib.h>
 #include <Library/PcdLib.h>
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/UefiLib.h>
@@ -68,11 +67,7 @@ EFI_STATUS menu_draw_image(IN VOID *bmp_data, IN UINTN bmp_size)
 
 EFI_STATUS menu_load_embedded_bitmap(OUT VOID **bmp_data, OUT UINTN *bmp_size)
 {
-	EFI_GUID img_guid = { 0x4E3D896A, 0x6D8E, 0x4A6F,
-			 { 0x8D, 0x0B, 0x5F, 0x1C, 0x6E, 0x3D, 0x81, 0xDC } };
-
-	return GetSectionFromAnyFv(&img_guid,
-		                   EFI_SECTION_RAW, 0, bmp_data, bmp_size);
+	return fs_load_bmp(L"\\EFI\\kboot\\images\\kboot.bmp", bmp_data, bmp_size);
 }
 
 EFI_STATUS menu_get_name(IN CHAR16 *path_name, OUT CHAR16 **ptr)
@@ -151,7 +146,7 @@ EFI_STATUS menu_exec(IN EFI_HANDLE img_handle)
 
 	status = menu_load_embedded_bitmap(&bmp_data, &bmp_size);
 	if (EFI_ERROR(status)) {
-		err(L"bitmap not found");
+		err(L"bitmap not found, status = %d", status);
 	}
 
 	status = menu_draw_image(bmp_data, bmp_size);

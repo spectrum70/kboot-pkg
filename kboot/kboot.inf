@@ -54,6 +54,5 @@
   gEfiPartitionInfoProtocolGuid
   gEfiGraphicsOutputProtocolGuid
 
-[FeaturePcd]
-
-[Pcd]
+[Binaries.common]
+BIN|images/kboot.bmp|*
