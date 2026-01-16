@@ -120,7 +120,6 @@ EFI_STATUS fs_look_for_linux_images(IN EFI_HANDLE *handle_root,
 	return EFI_NOT_FOUND;
 }
 
-
 EFI_STATUS EFIAPI fs_find_mbr_linux_entries(
 		IN struct fs_file_details entries[MAX_BOOT_ENTRIES])
 {

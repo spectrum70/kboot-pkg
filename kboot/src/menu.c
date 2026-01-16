@@ -28,11 +28,15 @@
 #include <Protocol/GraphicsOutput.h>
 #include <Protocol/SimpleTextOut.h>
 
+#include "cpu.h"
 #include "log.h"
+#include "memory.h"
 #include "fs.h"
+#include "utils.h"
 #include "version.h"
 
-#define MENU_START_ROW 15
+#define MENU_START_ROW	15
+#define MENU_X_COL	7
 
 static int selected;
 
@@ -56,7 +60,7 @@ EFI_STATUS menu_draw_image(IN VOID *bmp_data, IN UINTN bmp_size)
 
         status = gop->Blt(gop, blt_buffer, EfiBltBufferToVideo,
         		     0, 0, /* Source X, Y (Start of our buffer) */
-                             0, 0, /* Destination X, Y (Top-left corner) */
+                             42, 0, /* Destination X, Y (Top-left corner) */
                              width, height,
                              0     /* Delta (0 = buffer is tightly packed) */
                              );
@@ -91,36 +95,40 @@ EFI_STATUS menu_get_name(IN CHAR16 *path_name, OUT CHAR16 **ptr)
 	return EFI_SUCCESS;
 }
 
-VOID menu_display(struct fs_file_details entries[MAX_BOOT_ENTRIES])
+VOID menu_entries_display(struct fs_file_details entries[MAX_BOOT_ENTRIES], IN UINTN row)
 {
 	UINTN i = 0;
   	EFI_STATUS status;
 
-	gST->ConOut->SetCursorPosition(gST->ConOut, 0, MENU_START_ROW);
-
-	gST->ConOut->SetAttribute(gST->ConOut, EFI_TEXT_ATTR(EFI_YELLOW, EFI_BLACK));
-	Print(L"kboot v." version " - (C) 2026, Kernelspace\n\n");
-
 	while (entries[i].device_handle) {
 		CHAR16 *name;
 
+		gST->ConOut->SetCursorPosition(gST->ConOut, MENU_X_COL, ++row);
 		if (i == selected)
-			gST->ConOut->SetAttribute(gST->ConOut, EFI_TEXT_ATTR(EFI_BLACK, EFI_LIGHTGRAY));
+			gST->ConOut->SetAttribute(gST->ConOut,
+			    EFI_TEXT_ATTR(EFI_BLACK, EFI_LIGHTGRAY));
 		else
-			gST->ConOut->SetAttribute(gST->ConOut, EFI_TEXT_ATTR(EFI_LIGHTGRAY, EFI_BLACK));
+			gST->ConOut->SetAttribute(gST->ConOut,
+			    EFI_TEXT_ATTR(EFI_LIGHTGRAY, EFI_BLACK));
 
 		status = menu_get_name(entries[i].path_name, &name);
 		if (!EFI_ERROR(status)) {
-			Print(name);
-			Print(L"\n");
+			Print(L"[");
+			if (i == selected)
+				gST->ConOut->SetAttribute(gST->ConOut,
+				    EFI_TEXT_ATTR(EFI_YELLOW, EFI_LIGHTGRAY));
+			Print(L" ");
+			if (i == selected)
+				gST->ConOut->SetAttribute(gST->ConOut,
+				    EFI_TEXT_ATTR(EFI_BLACK, EFI_LIGHTGRAY));
+			Print(L"] %s", name);
 		}
 
 		i++;
 	}
 	Print(L"\n");
 
-	/* Hide the cursor now */
-	gST->ConOut->SetCursorPosition(gST->ConOut, 0, 0);
+	gST->ConOut->EnableCursor(gST->ConOut, FALSE);
 }
 
 EFI_STATUS menu_read_key(OUT EFI_INPUT_KEY *key)
@@ -137,7 +145,8 @@ EFI_STATUS menu_exec(IN EFI_HANDLE img_handle)
 	struct fs_file_details entries[MAX_BOOT_ENTRIES] = {0};
 	EFI_INPUT_KEY key;
 	UINTN i = 0, total_entries = 0;
-	UINTN bmp_size;
+	UINTN bmp_size, row;
+	UINT64 total_memory;
 	VOID *bmp_data;
 	EFI_STATUS status;
 
@@ -162,8 +171,28 @@ EFI_STATUS menu_exec(IN EFI_HANDLE img_handle)
 	while (entries[i++].device_handle != 0)
 		total_entries++;
 
+	memory_get_total(&total_memory);
+
+	row = MENU_START_ROW;
+	/* One line sep after title. */
+	gST->ConOut->SetCursorPosition(gST->ConOut, MENU_X_COL, row++);
+
+	gST->ConOut->SetAttribute(gST->ConOut, EFI_TEXT_ATTR(EFI_YELLOW, EFI_BLACK));
+	Print(L"kboot v." version " - (C) 2026, Kernelspace\n");
+
+	gST->ConOut->SetCursorPosition(gST->ConOut, MENU_X_COL, ++row);
+	cpu_print_cpu_id();
+
+	gST->ConOut->SetCursorPosition(gST->ConOut, MENU_X_COL, ++row);
+	Print(L"Total memory: ");
+	memory_get_total(&total_memory);
+	utils_print_size(total_memory, P_MEGA);
+
+	/* One line sep from info. */
+	row++;
+
 	for(;;) {
-		menu_display(entries);
+		menu_entries_display(entries, row);
 		menu_read_key(&key);
 		switch (key.ScanCode) {
 		case 1:

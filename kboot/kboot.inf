@@ -31,6 +31,9 @@
   src/menu.c
   src/fs.c
   src/loader.c
+  src/cpu.c
+  src/memory.c
+  src/utils.c
 
 [Packages]
   MdePkg/MdePkg.dec
@@ -40,6 +43,7 @@
   BmpSupportLib
   DxeServiceLib
   FileHandleLib
+  PciLib
   UefiApplicationEntryPoint
   UefiLib
 
