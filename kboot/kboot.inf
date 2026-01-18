@@ -57,6 +57,7 @@
   gEfiBlockIoProtocolGuid
   gEfiPartitionInfoProtocolGuid
   gEfiGraphicsOutputProtocolGuid
+  gEfiLoadFile2ProtocolGuid
 
 [Binaries.common]
 BIN|images/kboot.bmp|*

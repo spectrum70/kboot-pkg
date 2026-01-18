@@ -29,6 +29,7 @@
 #include <Protocol/SimpleTextOut.h>
 
 #include "cpu.h"
+#include "loader.h"
 #include "log.h"
 #include "memory.h"
 #include "fs.h"
@@ -116,7 +117,7 @@ VOID menu_entries_display(struct fs_file_details entries[MAX_BOOT_ENTRIES], IN U
 			Print(L"[");
 			if (i == selected)
 				gST->ConOut->SetAttribute(gST->ConOut,
-				    EFI_TEXT_ATTR(EFI_YELLOW, EFI_LIGHTGRAY));
+				    EFI_TEXT_ATTR(EFI_BLACK, EFI_BLUE));
 			Print(L" ");
 			if (i == selected)
 				gST->ConOut->SetAttribute(gST->ConOut,
@@ -202,6 +203,18 @@ EFI_STATUS menu_exec(IN EFI_HANDLE img_handle)
 		case 2:
 			if (selected < (total_entries - 1))
 				selected++;
+			break;
+		case 0:
+			status = loader_load_linux_kernel(
+				img_handle,
+				entries[selected].path_name);
+			if (EFI_ERROR(status)) {
+				err(L"cannot boot image %s",
+				    entries[selected].path_name);
+				for(;;);
+			}
+			break;
+		default:
 			break;
 		}
 	}
