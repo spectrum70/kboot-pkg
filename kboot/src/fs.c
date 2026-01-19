@@ -32,9 +32,33 @@
 #include <Protocol/SimpleFileSystem.h>
 
 #include "fs.h"
+#include "utils.h"
 #include "log.h"
 
 #define MBR_LINUX_NATIVE 0x83
+
+VOID EFIAPI fs_sort_details_by_creation(struct fs_file_details *entries)
+{
+	int n, i, j;
+
+	/* Count items first. */
+	n = 0;
+	while (entries[n].device_handle != 0)
+		n++;
+
+	for (i = 0; i < n - 1; i++) {
+		// Last i elements are already in place
+         	for (j = 0; j < n - i - 1; j++) {
+          		if (utils_compare_efi_time(&entries[j].creation_time,
+                            &entries[j + 1].creation_time) > 0) {
+				// Swap arr[j] and arr[j+1]
+				struct fs_file_details temp = entries[j];
+				entries[j] = entries[j + 1];
+				entries[j + 1] = temp;
+            		}
+          	}
+	}
+}
 
 EFI_GUID gLinuxRootPartitionGuid = { 0x4F68BCE3, 0xE8CD, 0x4DB1, \
 	{ 0x96, 0xE7, 0xFB, 0xCA, 0xF9, 0x84, 0xB7, 0x09 } };
@@ -155,6 +179,8 @@ EFI_STATUS EFIAPI fs_find_mbr_linux_entries(
 
 	if (handles != NULL)
     		FreePool(handles);
+
+	fs_sort_details_by_creation(entries);
 
 	return status;
 }

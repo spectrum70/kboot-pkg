@@ -53,3 +53,18 @@ VOID utils_print_size(IN UINT64 size, IN enum p_mode mode)
 			Print(L", %dB", b);
 	}
 }
+
+INTN EFIAPI utils_compare_efi_time(IN EFI_TIME *time1, IN EFI_TIME *time2)
+{
+	if (time1->Year != time2->Year)
+		return (time1->Year - time2->Year);
+	if (time1->Month != time2->Month)
+		return (time1->Month - time2->Month);
+	if (time1->Day != time2->Day)
+		return (time1->Day - time2->Day);
+	if (time1->Hour != time2->Hour)
+		return (time1->Hour - time2->Hour);
+	if (time1->Minute != time2->Minute)
+		return (time1->Minute - time2->Minute);
+	return (time1->Second - time2->Second);
+}
