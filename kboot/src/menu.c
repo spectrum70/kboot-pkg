@@ -122,7 +122,15 @@ VOID menu_entries_display(struct fs_file_details entries[MAX_BOOT_ENTRIES], IN U
 			if (i == selected)
 				gST->ConOut->SetAttribute(gST->ConOut,
 				    EFI_TEXT_ATTR(EFI_BLACK, EFI_LIGHTGRAY));
-			Print(L"] %s", name);
+			Print(L"] %04d-%02d-%02d %02d:%02d:%02d",
+				entries[i].creation_time.Year,
+				entries[i].creation_time.Month,
+				entries[i].creation_time.Day,
+				entries[i].creation_time.Hour,
+				entries[i].creation_time.Minute,
+				entries[i].creation_time.Second
+			);
+			Print(L"  %s", name);
 		}
 
 		i++;

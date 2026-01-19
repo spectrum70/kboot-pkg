@@ -6,6 +6,7 @@
 
 struct fs_file_details {
 	EFI_HANDLE device_handle;
+	EFI_TIME creation_time;
 	CHAR16 path_name[MAX_PATH_NAME];
 };
 

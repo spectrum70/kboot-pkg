@@ -60,15 +60,16 @@ EFI_STATUS EFIAPI fs_find_boot_entry(IN EFI_HANDLE *handle_root,
 	while (!EFI_ERROR(status) && !no_more_files) {
       		// Process the entry (e.g., check for vmlinuz)
         	if (StrnCmp(f_info->FileName, L"vmlinuz", 7) == 0) {
-         		struct fs_file_details ffd;
+			struct fs_file_details ffd;
 
-         		SetMem(&ffd, sizeof(struct fs_file_details), 0);
+			SetMem(&ffd, sizeof(struct fs_file_details), 0);
 
-           		ffd.device_handle = handle_root;
+			ffd.device_handle = handle_root;
+			ffd.creation_time = f_info->CreateTime;
 
-           		StrCatS(ffd.path_name, MAX_PATH_NAME, path);
-             		StrCatS(ffd.path_name, MAX_PATH_NAME, L"\\");
-               		StrCatS(ffd.path_name, MAX_PATH_NAME, f_info->FileName);
+			StrCatS(ffd.path_name, MAX_PATH_NAME, path);
+			StrCatS(ffd.path_name, MAX_PATH_NAME, L"\\");
+			StrCatS(ffd.path_name, MAX_PATH_NAME, f_info->FileName);
 
              		entries[entry++] = ffd;
          	}
