@@ -24,6 +24,7 @@
 #include <Library/BmpSupportLib.h>
 #include <Library/PcdLib.h>
 #include <Library/UefiBootServicesTableLib.h>
+#include <Library/UefiRuntimeServicesTableLib.h>
 #include <Library/UefiLib.h>
 #include <Pi/PiFirmwareFile.h>
 #include <Protocol/GraphicsOutput.h>
@@ -39,75 +40,17 @@
 #include "utils.h"
 #include "version.h"
 
+#include "lcd.c"
+
 #define MENU_START_ROW	15
 #define MENU_X_COL	7
 
-#define SEGMENTS	7
-#define SEG_POINTS	6
+#define LCD_PIXEL_ROWS	7
 
-#define PROGRESS_POS_X	260
-#define PROGRESS_POS_Y  580
-#define CHAR_0_OFF_X	(PROGRESS_POS_X - 22)
-#define CHAR_0_OFF_Y    (PROGRESS_POS_Y - 46)
+#define PROGRESS_POS_X	690
+#define PROGRESS_POS_Y  74
 
 static int selected;
-
-static struct point seg[SEGMENTS][SEG_POINTS] = { \
-/* a */ {{11, 7}, {16, 0}, {126, 0}, {133, 7}, {105, 32}, {36, 32}},
-/* b */ {{137, 13}, {143, 18}, {143, 106}, {127, 123}, {111, 106}, {111, 38}},
-/* c */ {{138, 244}, {144, 239}, {144, 148}, {127, 133}, {112, 149}, {112, 218}}
-/* d */ ,{{10, 248}, {35, 222}, {105, 222}, {132, 248}, {126, 255}, {16, 255}},
-/* e */ {{16, 132}, {32, 148}, {32, 219}, {6, 244}, {0, 237}, {0, 148}},
-/* f */ {{0, 18}, {0, 107}, {16, 122}, {32, 107}, {32, 36}, {7, 13}},
-/* g */ {{122, 128}, {107, 112}, {35, 112}, {22, 128}, {35, 143}, {107, 143}},
-};
-
-void menu_draw_line(IN EFI_GRAPHICS_OUTPUT_PROTOCOL *gop,
-		    INTN x0, INTN y0, INTN x1, INTN y1,
-	            EFI_GRAPHICS_OUTPUT_BLT_PIXEL color)
-{
-	INTN dx = ABS(x1 - x0), sx = x0 < x1 ? 1 : -1;
-	INTN dy = -ABS(y1 - y0), sy = y0 < y1 ? 1 : -1;
-	INTN err = dx + dy, e2;
-
-	while (TRUE) {
-		// Write pixel to GOP FrameBuffer at (x0, y0)
-		UINT32 *FB = (UINT32 *)gop->Mode->FrameBufferBase;
-		FB[y0 * gop->Mode->Info->PixelsPerScanLine + x0] =
-			*(UINT32*)&color;
-
-		if (x0 == x1 && y0 == y1) break;
-		e2 = 2 * err;
-		if (e2 >= dy) { err += dy; x0 += sx; }
-		if (e2 <= dx) { err += dx; y0 += sy; }
-	}
-}
-
-EFI_STATUS menu_draw_segment(IN EFI_GRAPHICS_OUTPUT_PROTOCOL *gop,
-			     IN struct point *p,
-			     IN EFI_GRAPHICS_OUTPUT_BLT_PIXEL color)
-{
-	EFI_STATUS status = EFI_SUCCESS;
-	UINTN pt, scale = 3;
-
- 	for (pt = 0; pt < SEG_POINTS - 1; pt++) {
-		menu_draw_line(gop,
-		                  p[pt].x / scale + CHAR_0_OFF_X,
-			          p[pt].y / scale + CHAR_0_OFF_Y,
-		                  p[pt + 1].x / scale + CHAR_0_OFF_X,
-				  p[pt + 1].y / scale + CHAR_0_OFF_Y,
-		                  color);
-   	}
-
-  	menu_draw_line(gop,
-   		       p[SEG_POINTS - 1].x / scale + CHAR_0_OFF_X,
-                       p[SEG_POINTS - 1].y / scale + CHAR_0_OFF_Y,
-		       p[0].x / scale + CHAR_0_OFF_X,
-		       p[0].y / scale + CHAR_0_OFF_Y,
-		       color);
-
-   	return status;
-}
 
 EFI_STATUS menu_draw_image(IN EFI_GRAPHICS_OUTPUT_PROTOCOL *gop,
 			   IN VOID *bmp_data, IN UINTN bmp_size)
@@ -117,41 +60,45 @@ EFI_STATUS menu_draw_image(IN EFI_GRAPHICS_OUTPUT_PROTOCOL *gop,
 	UINTN blt_buffer_size = 0;
 	UINTN height, width;
 
-        status = TranslateBmpToGopBlt(bmp_data, bmp_size, &blt_buffer,
-                		      &blt_buffer_size, &height, &width);
-        if (EFI_ERROR(status))
-        	return status;
+	status = TranslateBmpToGopBlt(bmp_data, bmp_size, &blt_buffer,
+				      &blt_buffer_size, &height, &width);
+	if (EFI_ERROR(status))
+		return status;
 
-        status = gop->Blt(gop, blt_buffer, EfiBltBufferToVideo,
-        		  0, 0, 42, 0, width, height, 0);
+	status = gop->Blt(gop, blt_buffer, EfiBltBufferToVideo,
+			  0, 0, 42, 0, width, height, 0);
 
-        gBS->FreePool(blt_buffer);
+	gBS->FreePool(blt_buffer);
 
-        return status;
+	return status;
 }
 
-static CHAR8 lcd_num[10][SEGMENTS] = {
-	/* a, b, c, d, e, f, g */
-	{1, 1, 1, 1, 1, 1, 0},
-	{0, 1, 1, 0, 0, 0, 0},
-	{1, 1, 0, 1, 1, 0, 1},
-	{1, 1, 1, 1, 0, 0, 1},
-	{0, 1, 1, 0, 0, 1, 1},
-	{1, 0, 1, 1, 0, 1, 1},
-	{1, 0, 1, 1, 1, 1, 1},
-	{1, 1, 1, 0, 0, 0, 0},
-	{1, 1, 1, 1, 1, 1, 1},
-	{1, 1, 1, 1, 0, 1, 1},
-};
-
-EFI_STATUS menu_show_lcd_num(IN EFI_GRAPHICS_OUTPUT_PROTOCOL *gop, UINTN n)
+EFI_STATUS menu_show_lcd_num(UINTN xpos, UINTN ypos, UINTN n)
 {
-	UINTN i;
-	EFI_GRAPHICS_OUTPUT_BLT_PIXEL orange = {0, 255, 165, 0};
-	EFI_GRAPHICS_OUTPUT_BLT_PIXEL dark = {0, 20, 20, 20};
+	UINTN i, x, y, f, s;
+	UINT32 green = 0x00ffdda3;
+	UINT32 dark = 0x00333333;
 
-	for (i = 0; i < 7; ++i)
-		menu_draw_segment(gop, seg[i], lcd_num[n][i] ? orange : dark);
+	f = n / 10;
+	s = n % 10;
+
+	for (i = 0, y = ypos; i < LCD_PIXEL_ROWS; ++i, y += 18) {
+		x = xpos;
+		fb_draw_pixel(x += 18, y, lcd_n[f][i] & 16 ? green : dark);
+		fb_draw_pixel(x += 18, y, lcd_n[f][i] & 8 ? green : dark);
+		fb_draw_pixel(x += 18, y, lcd_n[f][i] & 4 ? green : dark);
+		fb_draw_pixel(x += 18, y, lcd_n[f][i] & 2 ? green : dark);
+		fb_draw_pixel(x += 18, y, lcd_n[f][i] & 1 ? green : dark);
+	}
+
+	for (i = 0, y = ypos; i < LCD_PIXEL_ROWS; ++i, y += 18) {
+		x = xpos + 18 * 5 + 7;
+		fb_draw_pixel(x += 18, y, lcd_n[s][i] & 16 ? green : dark);
+		fb_draw_pixel(x += 18, y, lcd_n[s][i] & 8 ? green : dark);
+		fb_draw_pixel(x += 18, y, lcd_n[s][i] & 4 ? green : dark);
+		fb_draw_pixel(x += 18, y, lcd_n[s][i] & 2 ? green : dark);
+		fb_draw_pixel(x += 18, y, lcd_n[s][i] & 1 ? green : dark);
+	}
 
 	return EFI_SUCCESS;
 }
@@ -167,11 +114,11 @@ EFI_STATUS menu_get_name(IN CHAR16 *path_name, OUT CHAR16 **ptr)
 	UINTN len;
 
 	if (path_name == NULL)
-  		return EFI_INVALID_PARAMETER;
+		return EFI_INVALID_PARAMETER;
 
 	len = StrLen(path_name);
 	if (len == 0)
-  		return EFI_INVALID_PARAMETER;
+		return EFI_INVALID_PARAMETER;
 
 	*ptr = path_name + len - 1;
 	while (*ptr >= path_name && **ptr != L'\\')
@@ -182,7 +129,15 @@ EFI_STATUS menu_get_name(IN CHAR16 *path_name, OUT CHAR16 **ptr)
 	return EFI_SUCCESS;
 }
 
-VOID menu_entries_display(struct fs_file_details entries[MAX_BOOT_ENTRIES], IN UINTN row)
+static int countdown = 15;
+
+static VOID menu_update_progress(UINT32 x, UINT32 y)
+{
+	menu_show_lcd_num(x, y, countdown);
+}
+
+VOID menu_entries_display(struct fs_file_details entries[MAX_BOOT_ENTRIES],
+			  IN UINTN row)
 {
 	UINTN i = 0;
   	EFI_STATUS status;
@@ -235,34 +190,25 @@ EFI_STATUS menu_read_key(OUT EFI_INPUT_KEY *key)
 	return gST->ConIn->ReadKeyStroke(gST->ConIn, key);
 }
 
-static int countdown = 9;
-
-static VOID menu_update_progress(IN EFI_GRAPHICS_OUTPUT_PROTOCOL *gop,
-				 UINT32 x, UINT32 y)
-{
-	//int i;
-	//int dark = countdown * 10;
-
-	fb_draw_circle(x, y, 100, 0x00ffff00);
-
-	/*for (i = 100; i > dark; --i)
-		fb_draw_circle(x, y, i, 0x000078B7);
-	for (i = dark; i >= 0; --i)
-		fb_draw_circle(x, y, i, 0x000018E7);*/
-
-	menu_show_lcd_num(gop, countdown);
-}
-
 VOID EFIAPI menu_time_sec_callback(IN EFI_EVENT event, IN VOID *context)
 {
-	IN EFI_GRAPHICS_OUTPUT_PROTOCOL *gop =
-			(IN EFI_GRAPHICS_OUTPUT_PROTOCOL *)context;
+	EFI_TIME time;
 
-	menu_update_progress(gop, PROGRESS_POS_X, PROGRESS_POS_Y);
+	// Retrieve the current time and date from the hardware
+	gRT->GetTime(&time, NULL);
 
-	if (countdown-- == 0) {
-		gBS->SetTimer(event, TimerCancel, 0);
+	if (countdown >= 0) {
+		menu_update_progress(PROGRESS_POS_X, PROGRESS_POS_Y);
+		countdown--;
 	}
+
+	menu_show_lcd_num(PROGRESS_POS_X + 240, PROGRESS_POS_Y, time.Day);
+	menu_show_lcd_num(PROGRESS_POS_X + 440, PROGRESS_POS_Y, time.Month);
+	menu_show_lcd_num(PROGRESS_POS_X + 640, PROGRESS_POS_Y,
+			  time.Year - 2000);
+	menu_show_lcd_num(PROGRESS_POS_X + 860, PROGRESS_POS_Y, time.Hour);
+	menu_show_lcd_num(PROGRESS_POS_X + 1060, PROGRESS_POS_Y, time.Minute);
+	menu_show_lcd_num(PROGRESS_POS_X + 1260, PROGRESS_POS_Y, time.Second);
 }
 
 EFI_STATUS menu_exec(IN EFI_HANDLE img_handle)
@@ -278,11 +224,10 @@ EFI_STATUS menu_exec(IN EFI_HANDLE img_handle)
 	EFI_STATUS status;
 
 	status = gBS->LocateProtocol(&gEfiGraphicsOutputProtocolGuid,
-                  		     NULL, (VOID **)&gop);
-        if (EFI_ERROR(status))
-        	return status;
-
-        fb_init(gop);
+				     NULL, (VOID **)&gop);
+	if (EFI_ERROR(status))
+		return status;
+	fb_init(gop);
 
 	gST->ConOut->ClearScreen(gST->ConOut);
 
@@ -323,8 +268,8 @@ EFI_STATUS menu_exec(IN EFI_HANDLE img_handle)
 	utils_print_size(total_memory, P_MEGA);
 
 	status = gBS->CreateEvent(EVT_TIMER | EVT_NOTIFY_SIGNAL,
-                	TPL_CALLBACK, menu_time_sec_callback,
-                 	gop, &periodic_event);
+				  TPL_CALLBACK, menu_time_sec_callback,
+				  gop, &periodic_event);
 
 	if (!EFI_ERROR(status)) {
 		status = gBS->SetTimer(periodic_event, TimerPeriodic, 10000000);
@@ -346,6 +291,9 @@ EFI_STATUS menu_exec(IN EFI_HANDLE img_handle)
 				selected++;
 			break;
 		case 0:
+			gST->ConOut->SetCursorPosition(gST->ConOut,
+					MENU_X_COL, row + total_entries + 5);
+			Print(L"Loading kernel ...");
 			status = loader_load_linux_kernel(
 				img_handle,
 				entries[selected].path_name);

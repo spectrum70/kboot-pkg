@@ -89,6 +89,39 @@ VOID EFIAPI fb_draw_circle(UINTN x, UINTN y, UINTN radius, UINT32 color)
 	}
 }
 
+VOID EFIAPI fb_draw_line(IN EFI_GRAPHICS_OUTPUT_PROTOCOL *gop,
+			 INTN x0, INTN y0, INTN x1, INTN y1,
+			 EFI_GRAPHICS_OUTPUT_BLT_PIXEL color)
+{
+	INTN dx = ABS(x1 - x0), sx = x0 < x1 ? 1 : -1;
+	INTN dy = -ABS(y1 - y0), sy = y0 < y1 ? 1 : -1;
+	INTN err = dx + dy, e2;
+
+	while (TRUE) {
+		// Write pixel to GOP FrameBuffer at (x0, y0)e;
+		fb[y0 * scan_line + x0] = *(UINT32*)&color;
+
+		if (x0 == x1 && y0 == y1) break;
+		e2 = 2 * err;
+		if (e2 >= dy) { err += dy; x0 += sx; }
+		if (e2 <= dx) { err += dx; y0 += sy; }
+	}
+}
+
+VOID EFIAPI fb_draw_pixel(UINTN x, UINTN y, UINT32 color)
+{
+	UINTN ix, sx, sy;
+
+	sx = x + 16;
+	sy = y + 16;
+
+	for (; y < sy; y++) {
+		for (ix = x; ix < sx; ix++) {
+			fb[y * scan_line + ix] = color;
+		}
+	}
+}
+
 VOID EFIAPI fb_init(IN EFI_GRAPHICS_OUTPUT_PROTOCOL *gop)
 {
 	fb = (UINT32 *)(UINTN)gop->Mode->FrameBufferBase;
