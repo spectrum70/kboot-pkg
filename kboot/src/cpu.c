@@ -19,6 +19,8 @@
  * MA  02110-1301, USA.
  */
 
+#include <Uefi.h>
+
 #include <Library/BaseLib.h>
 #include <Library/BaseMemoryLib.h>
 #include <Library/PciLib.h>
@@ -43,8 +45,6 @@ EFI_STATUS EFIAPI cpu_print_amd_ryzen_cpu_temp(VOID)
 	PciWrite32(AMD_SMN_ADDR_REG, AMD_THM_TCTL_ADDR);
 	tctl_raw = PciRead32(AMD_SMN_DATA_REG);
 
-	// 3. Convert raw value to Celsius
-	// For Zen processors, bits [31:21] contain the Tctl value in 0.125°C increments
 	temp_in_celsius = (INT32)((tctl_raw >> 21) & 0x7FF) / 8;
 
 	Print(L"CPU Temperature: %d C\n", temp_in_celsius);
@@ -70,14 +70,14 @@ EFI_STATUS EFIAPI cpu_print_cpu_id(VOID)
 
 	// Retrieve the Brand String (stored in 3 consecutive leaves)
 	// Leaf 0x80000002
-  	AsmCpuid(0x80000002, &ptr[0], &ptr[1], &ptr[2], &ptr[3]);
-   	// Leaf 0x80000003
-    	AsmCpuid(0x80000003, &ptr[4], &ptr[5], &ptr[6], &ptr[7]);
-     	// Leaf 0x80000004
-      	AsmCpuid(0x80000004, &ptr[8], &ptr[9], &ptr[10], &ptr[11]);
+	AsmCpuid(0x80000002, &ptr[0], &ptr[1], &ptr[2], &ptr[3]);
+	// Leaf 0x80000003
+	AsmCpuid(0x80000003, &ptr[4], &ptr[5], &ptr[6], &ptr[7]);
+	// Leaf 0x80000004
+	AsmCpuid(0x80000004, &ptr[8], &ptr[9], &ptr[10], &ptr[11]);
 
-        // Print the result (using %a for CHAR8/ASCII string)
-        Print(L"CPU: %a\n", str_brand);
+	// Print the result (using %a for CHAR8/ASCII string)
+	Print(L"CPU: %a\n", str_brand);
 
-        return EFI_SUCCESS;
+	return EFI_SUCCESS;
 }

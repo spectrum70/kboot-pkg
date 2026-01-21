@@ -19,12 +19,13 @@
  * MA  02110-1301, USA.
  */
 
-#include <Pi/PiFirmwareFile.h>
+#include <Uefi.h>
 
 #include <Library/BmpSupportLib.h>
 #include <Library/PcdLib.h>
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/UefiLib.h>
+#include <Pi/PiFirmwareFile.h>
 #include <Protocol/GraphicsOutput.h>
 #include <Protocol/SimpleTextOut.h>
 
@@ -33,6 +34,7 @@
 #include "log.h"
 #include "memory.h"
 #include "menu.h"
+#include "fb.h"
 #include "fs.h"
 #include "utils.h"
 #include "version.h"
@@ -40,38 +42,24 @@
 #define MENU_START_ROW	15
 #define MENU_X_COL	7
 
+#define SEGMENTS	7
 #define SEG_POINTS	6
-#define CHAR_0_OFF_X	400
-#define CHAR_0_OFF_Y    600
+
+#define PROGRESS_POS_X	260
+#define PROGRESS_POS_Y  580
+#define CHAR_0_OFF_X	(PROGRESS_POS_X - 22)
+#define CHAR_0_OFF_Y    (PROGRESS_POS_Y - 46)
 
 static int selected;
 
-static struct point seg_f[SEG_POINTS] = {
-	{0, 18}, {0, 107}, {16, 122}, {32, 107}, {32, 36}, {7, 13},
-};
-
-static struct point seg_a[SEG_POINTS] = {
-	{11, 7}, {16, 0}, {126, 0}, {133, 7}, {105, 32}, {36, 32},
-};
-
-static struct point seg_b[SEG_POINTS] = {
-	{137, 13}, {143, 18}, {143, 106}, {127, 123}, {111, 106}, {111, 38},
-};
-
-static struct point seg_g[SEG_POINTS] = {
-	{122, 128}, {107, 112}, {35, 112}, {22, 128}, {35, 143}, {107, 143},
-};
-
-static struct point seg_e[SEG_POINTS] = {
-	{16, 132}, {32, 148}, {32, 219}, {6, 244}, {0, 237}, {0, 148},
-};
-
-static struct point seg_d[SEG_POINTS] = {
-	{10, 248}, {35, 222}, {105, 222}, {132, 248}, {126, 255}, {16, 255},
-};
-
-static struct point seg_c[SEG_POINTS] = {
-	{138, 244}, {144, 239}, {144, 148}, {127, 133}, {112, 149}, {112, 218},
+static struct point seg[SEGMENTS][SEG_POINTS] = { \
+/* a */ {{11, 7}, {16, 0}, {126, 0}, {133, 7}, {105, 32}, {36, 32}},
+/* b */ {{137, 13}, {143, 18}, {143, 106}, {127, 123}, {111, 106}, {111, 38}},
+/* c */ {{138, 244}, {144, 239}, {144, 148}, {127, 133}, {112, 149}, {112, 218}}
+/* d */ ,{{10, 248}, {35, 222}, {105, 222}, {132, 248}, {126, 255}, {16, 255}},
+/* e */ {{16, 132}, {32, 148}, {32, 219}, {6, 244}, {0, 237}, {0, 148}},
+/* f */ {{0, 18}, {0, 107}, {16, 122}, {32, 107}, {32, 36}, {7, 13}},
+/* g */ {{122, 128}, {107, 112}, {35, 112}, {22, 128}, {35, 143}, {107, 143}},
 };
 
 void menu_draw_line(IN EFI_GRAPHICS_OUTPUT_PROTOCOL *gop,
@@ -95,38 +83,14 @@ void menu_draw_line(IN EFI_GRAPHICS_OUTPUT_PROTOCOL *gop,
 	}
 }
 
-VOID menu_clean_fb_rect(IN EFI_GRAPHICS_OUTPUT_PROTOCOL *gop,
-	                IN UINT32 X, IN UINT32 Y,
-		        IN UINT32 width, IN UINT32 height,
-			IN UINT32 color)
-{
-	UINT32 *base = (UINT32 *)gop->Mode->FrameBufferBase;
-	UINT32 ppsl = gop->Mode->Info->PixelsPerScanLine;
-
-	// Boundary check to prevent system crashe
-	if (X + width > gop->Mode->Info->HorizontalResolution ||
-            Y + height > gop->Mode->Info->VerticalResolution) {
-            return;
-        }
-
-	for (UINT32 row = Y; row < Y + height; row++) {
-        	UINT32 *current_row = base + (row * ppsl);
-
-          	for (UINT32 col = X; col < X + width; col++) {
-            		current_row[col] = color;
-           	}
-    	}
-}
-
 EFI_STATUS menu_draw_segment(IN EFI_GRAPHICS_OUTPUT_PROTOCOL *gop,
 			     IN struct point *p,
 			     IN EFI_GRAPHICS_OUTPUT_BLT_PIXEL color)
 {
 	EFI_STATUS status = EFI_SUCCESS;
-	UINTN pt, scale = 2;
+	UINTN pt, scale = 3;
 
  	for (pt = 0; pt < SEG_POINTS - 1; pt++) {
-   		// Use EfiBltVideoFill to draw a single horizontal segment (1 pixel high)
 		menu_draw_line(gop,
 		                  p[pt].x / scale + CHAR_0_OFF_X,
 			          p[pt].y / scale + CHAR_0_OFF_Y,
@@ -159,64 +123,35 @@ EFI_STATUS menu_draw_image(IN EFI_GRAPHICS_OUTPUT_PROTOCOL *gop,
         	return status;
 
         status = gop->Blt(gop, blt_buffer, EfiBltBufferToVideo,
-        		     0, 0, /* Source X, Y (Start of our buffer) */
-                             42, 0, /* Destination X, Y (Top-left corner) */
-                             width, height,
-                             0     /* Delta (0 = buffer is tightly packed) */
-                             );
+        		  0, 0, 42, 0, width, height, 0);
 
         gBS->FreePool(blt_buffer);
 
         return status;
 }
 
-static CHAR8 lcd_num[10][8] = {
-	{'a', 'b', 'c', 'd', 'e', 'f', 0},
-	{'b', 'c', 0},
-	{'a', 'b', 'g', 'e', 'd', 0},
-	{'a', 'b', 'g', 'c', 'd', 0},
-	{'f', 'b', 'g', 'c', 0},
-	{'a', 'f', 'g', 'c', 'd', 0},
-	{'a', 'f', 'g', 'e', 'd', 'c', 0},
-	{'a', 'b', 'c', 0},
-	{'a', 'b', 'g', 'f', 'c', 'd', 'e', 0},
-	{'a', 'b', 'g', 'f', 'c', 'd', 0},
+static CHAR8 lcd_num[10][SEGMENTS] = {
+	/* a, b, c, d, e, f, g */
+	{1, 1, 1, 1, 1, 1, 0},
+	{0, 1, 1, 0, 0, 0, 0},
+	{1, 1, 0, 1, 1, 0, 1},
+	{1, 1, 1, 1, 0, 0, 1},
+	{0, 1, 1, 0, 0, 1, 1},
+	{1, 0, 1, 1, 0, 1, 1},
+	{1, 0, 1, 1, 1, 1, 1},
+	{1, 1, 1, 0, 0, 0, 0},
+	{1, 1, 1, 1, 1, 1, 1},
+	{1, 1, 1, 1, 0, 1, 1},
 };
 
 EFI_STATUS menu_show_lcd_num(IN EFI_GRAPHICS_OUTPUT_PROTOCOL *gop, UINTN n)
 {
 	UINTN i;
-	EFI_GRAPHICS_OUTPUT_BLT_PIXEL yellow = {0, 255, 255, 0};
+	EFI_GRAPHICS_OUTPUT_BLT_PIXEL orange = {0, 255, 165, 0};
+	EFI_GRAPHICS_OUTPUT_BLT_PIXEL dark = {0, 20, 20, 20};
 
-	menu_clean_fb_rect(gop, CHAR_0_OFF_X, CHAR_0_OFF_Y, 100, 180, 0);
-
-	for (i = 0; i < 8; ++i) {
-		if (lcd_num[n][i] == 0)
-			break;
-		switch(lcd_num[n][i]) {
-		case 'a':
-			menu_draw_segment(gop, seg_a, yellow);
-			break;
-		case 'b':
-			menu_draw_segment(gop, seg_b, yellow);
-			break;
-		case 'c':
-			menu_draw_segment(gop, seg_c, yellow);
-			break;
-		case 'd':
-			menu_draw_segment(gop, seg_d, yellow);
-			break;
-		case 'e':
-			menu_draw_segment(gop, seg_e, yellow);
-			break;
-		case 'f':
-			menu_draw_segment(gop, seg_f, yellow);
-			break;
-		case 'g':
-			menu_draw_segment(gop, seg_g, yellow);
-			break;
-		}
-	}
+	for (i = 0; i < 7; ++i)
+		menu_draw_segment(gop, seg[i], lcd_num[n][i] ? orange : dark);
 
 	return EFI_SUCCESS;
 }
@@ -302,14 +237,30 @@ EFI_STATUS menu_read_key(OUT EFI_INPUT_KEY *key)
 
 static int countdown = 9;
 
+static VOID menu_update_progress(IN EFI_GRAPHICS_OUTPUT_PROTOCOL *gop,
+				 UINT32 x, UINT32 y)
+{
+	//int i;
+	//int dark = countdown * 10;
+
+	fb_draw_circle(x, y, 100, 0x00ffff00);
+
+	/*for (i = 100; i > dark; --i)
+		fb_draw_circle(x, y, i, 0x000078B7);
+	for (i = dark; i >= 0; --i)
+		fb_draw_circle(x, y, i, 0x000018E7);*/
+
+	menu_show_lcd_num(gop, countdown);
+}
+
 VOID EFIAPI menu_time_sec_callback(IN EFI_EVENT event, IN VOID *context)
 {
 	IN EFI_GRAPHICS_OUTPUT_PROTOCOL *gop =
-		(IN EFI_GRAPHICS_OUTPUT_PROTOCOL *)context;
+			(IN EFI_GRAPHICS_OUTPUT_PROTOCOL *)context;
 
-	menu_show_lcd_num(gop, countdown--);
+	menu_update_progress(gop, PROGRESS_POS_X, PROGRESS_POS_Y);
 
-	if (countdown == 0) {
+	if (countdown-- == 0) {
 		gBS->SetTimer(event, TimerCancel, 0);
 	}
 }
@@ -330,6 +281,8 @@ EFI_STATUS menu_exec(IN EFI_HANDLE img_handle)
                   		     NULL, (VOID **)&gop);
         if (EFI_ERROR(status))
         	return status;
+
+        fb_init(gop);
 
 	gST->ConOut->ClearScreen(gST->ConOut);
 

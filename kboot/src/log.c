@@ -20,6 +20,7 @@
  */
 
 #include <Uefi.h>
+
 #include <Library/PrintLib.h>
 #include <Library/UefiLib.h>
 
@@ -28,7 +29,7 @@ VOID EFIAPI log_out(IN CONST CHAR16 *pfx, IN CONST CHAR16 *msg, IN VA_LIST list)
 	CHAR16 buffer[256];
 
 	UnicodeVSPrint(buffer, sizeof(buffer), msg, list);
-  	Print(L"%s%s\n", pfx, buffer);
+	Print(L"%s%s\n", pfx, buffer);
 }
 
 VOID EFIAPI err(IN CONST CHAR16 *msg, ...)

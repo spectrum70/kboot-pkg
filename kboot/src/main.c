@@ -20,6 +20,7 @@
  */
 
 #include <Uefi.h>
+
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/UefiApplicationEntryPoint.h>
 #include <Library/UefiLib.h>
@@ -29,7 +30,7 @@
 #include "menu.h"
 
 EFI_STATUS EFIAPI uefi_main(IN EFI_HANDLE efi_handle,
-	                    IN EFI_SYSTEM_TABLE *sys_table)
+			    IN EFI_SYSTEM_TABLE *sys_table)
 {
 	EFI_STATUS status;
 
@@ -38,7 +39,7 @@ EFI_STATUS EFIAPI uefi_main(IN EFI_HANDLE efi_handle,
 	log(L"loading drivers ...");
 
 	status = loader_load_driver(efi_handle,
-		                    L"\\EFI\\kboot\\drivers\\ext4_x64.efi");
+				    L"\\EFI\\kboot\\drivers\\ext4_x64.efi");
 	if (EFI_ERROR(status)) {
 		err(L"error loading driver");
 		return status;

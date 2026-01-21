@@ -48,15 +48,15 @@ VOID EFIAPI fs_sort_details_by_creation(struct fs_file_details *entries)
 
 	for (i = 0; i < n - 1; i++) {
 		// Last i elements are already in place
-         	for (j = 0; j < n - i - 1; j++) {
-          		if (utils_compare_efi_time(&entries[j].creation_time,
-                            &entries[j + 1].creation_time) > 0) {
-				// Swap arr[j] and arr[j+1]
-				struct fs_file_details temp = entries[j];
-				entries[j] = entries[j + 1];
-				entries[j + 1] = temp;
-            		}
-          	}
+		for (j = 0; j < n - i - 1; j++) {
+			if (utils_compare_efi_time(&entries[j].creation_time,
+				&entries[j + 1].creation_time) > 0) {
+					// Swap arr[j] and arr[j+1]
+					struct fs_file_details temp = entries[j];
+					entries[j] = entries[j + 1];
+					entries[j + 1] = temp;
+			}
+		}
 	}
 }
 
@@ -66,7 +66,7 @@ EFI_GUID gLinuxRootPartitionGuid = { 0x4F68BCE3, 0xE8CD, 0x4DB1, \
 EFI_STATUS EFIAPI fs_find_boot_entry(IN EFI_HANDLE *handle_root,
 				     IN CHAR16 *path,
 				     IN EFI_FILE_PROTOCOL *boot_dir,
-	                IN struct fs_file_details entries[MAX_BOOT_ENTRIES])
+		IN struct fs_file_details entries[MAX_BOOT_ENTRIES])
 {
 	EFI_FILE_INFO *f_info;
 	EFI_STATUS status;
@@ -82,8 +82,8 @@ EFI_STATUS EFIAPI fs_find_boot_entry(IN EFI_HANDLE *handle_root,
 
 	status = FileHandleFindFirstFile(boot_dir, &f_info);
 	while (!EFI_ERROR(status) && !no_more_files) {
-      		// Process the entry (e.g., check for vmlinuz)
-        	if (StrnCmp(f_info->FileName, L"vmlinuz", 7) == 0) {
+		// Process the entry (e.g., check for vmlinuz)
+		if (StrnCmp(f_info->FileName, L"vmlinuz", 7) == 0) {
 			struct fs_file_details ffd;
 
 			SetMem(&ffd, sizeof(struct fs_file_details), 0);
@@ -95,17 +95,17 @@ EFI_STATUS EFIAPI fs_find_boot_entry(IN EFI_HANDLE *handle_root,
 			StrCatS(ffd.path_name, MAX_PATH_NAME, L"\\");
 			StrCatS(ffd.path_name, MAX_PATH_NAME, f_info->FileName);
 
-             		entries[entry++] = ffd;
-         	}
-           	status = FileHandleFindNextFile(boot_dir, f_info,
-            					&no_more_files);
+			entries[entry++] = ffd;
+		}
+		status = FileHandleFindNextFile(boot_dir, f_info,
+						&no_more_files);
 	}
 
-        return EFI_NOT_FOUND;
+	return EFI_NOT_FOUND;
 }
 
 EFI_STATUS fs_look_for_linux_images(IN EFI_HANDLE *handle_root,
-	               IN struct fs_file_details entries[MAX_BOOT_ENTRIES])
+			IN struct fs_file_details entries[MAX_BOOT_ENTRIES])
 {
 	EFI_STATUS status;
 	EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *fs;
@@ -154,31 +154,31 @@ EFI_STATUS EFIAPI fs_find_mbr_linux_entries(
 	EFI_PARTITION_INFO_PROTOCOL *part_info;
 
 	status = gBS->LocateHandleBuffer(ByProtocol,
-                    &gEfiSimpleFileSystemProtocolGuid, NULL, &count, &handles);
+		    &gEfiSimpleFileSystemProtocolGuid, NULL, &count, &handles);
 	if (EFI_ERROR(status))
 		return status;
 
 	for (UINTN i = 0, status = EFI_NOT_FOUND; i < count; i++) {
-	        // 2. Get Partition Info to check if it's MBR or GPT
-	        status = gBS->HandleProtocol(handles[i],
-	                        &gEfiPartitionInfoProtocolGuid,
-	                        (VOID**)&part_info);
-	        if (EFI_ERROR(status))
-	        	continue;
+		// 2. Get Partition Info to check if it's MBR or GPT
+		status = gBS->HandleProtocol(handles[i],
+				&gEfiPartitionInfoProtocolGuid,
+				(VOID**)&part_info);
+		if (EFI_ERROR(status))
+			continue;
 
-        	if (part_info->Type == PARTITION_TYPE_MBR) {
-         		if (part_info->Info.Mbr.OSIndicator ==
-           			MBR_LINUX_NATIVE) {
-                  		status = fs_look_for_linux_images(handles[i],
-                                                                  entries);
-                  		if (status != EFI_SUCCESS)
-                      			break;
-              		}
-         	}
-    	}
+		if (part_info->Type == PARTITION_TYPE_MBR) {
+			if (part_info->Info.Mbr.OSIndicator ==
+				MBR_LINUX_NATIVE) {
+				status = fs_look_for_linux_images(handles[i],
+								  entries);
+				if (status != EFI_SUCCESS)
+					break;
+			}
+		}
+	}
 
 	if (handles != NULL)
-    		FreePool(handles);
+		FreePool(handles);
 
 	fs_sort_details_by_creation(entries);
 
@@ -193,39 +193,39 @@ EFI_STATUS EFIAPI fs_find_gpt_linux_root(OUT EFI_HANDLE *root_handle)
 	EFI_STATUS status;
 
 	status = gBS->LocateHandleBuffer(ByProtocol,
-     					 &gEfiBlockIoProtocolGuid,
-        				 NULL, &count, &handles);
+					 &gEfiBlockIoProtocolGuid,
+					 NULL, &count, &handles);
 	if (EFI_ERROR(status) || count == 0)
-      		return status;
+		return status;
 
 	status = EFI_NOT_FOUND;
 
 	for (UINTN i = 0, *root_handle = NULL; i < count; i++) {
 		EFI_DEVICE_PATH_PROTOCOL *dpath;
 
-         	dpath = DevicePathFromHandle(handles[i]);
+		dpath = DevicePathFromHandle(handles[i]);
 
-          	while (!IsDevicePathEnd(dpath)) {
-           		if (DevicePathType(dpath) == MEDIA_DEVICE_PATH &&
-                            DevicePathSubType(dpath) == MEDIA_HARDDRIVE_DP) {
-                            	HARDDRIVE_DEVICE_PATH *hd;
+		while (!IsDevicePathEnd(dpath)) {
+			if (DevicePathType(dpath) == MEDIA_DEVICE_PATH &&
+			    DevicePathSubType(dpath) == MEDIA_HARDDRIVE_DP) {
+				HARDDRIVE_DEVICE_PATH *hd;
 
-                        	hd = (HARDDRIVE_DEVICE_PATH *)dpath;
+				hd = (HARDDRIVE_DEVICE_PATH *)dpath;
 
-                         	if (CompareGuid((EFI_GUID *)&(hd->Signature),
-                                         	&gLinuxRootPartitionGuid)) {
-                        		*root_handle = (UINTN)handles[i];
-                          		return EFI_SUCCESS;
-                                }
-                        }
-             		dpath = NextDevicePathNode(dpath);
-           	}
+				if (CompareGuid((EFI_GUID *)&(hd->Signature),
+						&gLinuxRootPartitionGuid)) {
+					*root_handle = (UINTN)handles[i];
+					return EFI_SUCCESS;
+				}
+			}
+			dpath = NextDevicePathNode(dpath);
+		}
 
-            	if (*(EFI_HANDLE *)root_handle != NULL)
-             		break;
-        }
+		if (*(EFI_HANDLE *)root_handle != NULL)
+			break;
+	}
 
-        return status;
+	return status;
 }
 
 EFI_STATUS fs_get_boot_entries(IN EFI_HANDLE efi_handle,
@@ -253,33 +253,33 @@ EFI_STATUS fs_get_boot_entries(IN EFI_HANDLE efi_handle,
 
 EFI_STATUS fs_load_bmp(IN CHAR16 *name, OUT VOID **buffer, OUT UINTN *size)
 {
- 	EFI_STATUS  status;
-  	EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *fs;
-   	EFI_FILE_PROTOCOL *root, *file;
-    	UINTN file_info_size = 0;
-     	EFI_FILE_INFO *file_info = NULL;
+	EFI_STATUS  status;
+	EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *fs;
+	EFI_FILE_PROTOCOL *root, *file;
+	UINTN file_info_size = 0;
+	EFI_FILE_INFO *file_info = NULL;
 
-      	status = gBS->LocateProtocol(&gEfiSimpleFileSystemProtocolGuid,
-     				     NULL, (VOID**)&fs);
-     	if (EFI_ERROR(status))
-     		return status;
+	status = gBS->LocateProtocol(&gEfiSimpleFileSystemProtocolGuid,
+				     NULL, (VOID**)&fs);
+	if (EFI_ERROR(status))
+		return status;
 
-      	status = fs->OpenVolume(fs, &root);
-       	status = root->Open(root, &file, name, EFI_FILE_MODE_READ, 0);
-        if (EFI_ERROR(status))
-        	return status;
+	status = fs->OpenVolume(fs, &root);
+	status = root->Open(root, &file, name, EFI_FILE_MODE_READ, 0);
+	if (EFI_ERROR(status))
+		return status;
 
-        status = file->GetInfo(file, &gEfiFileInfoGuid, &file_info_size, NULL);
-        if (status == EFI_BUFFER_TOO_SMALL) {
-        	file_info = AllocatePool(file_info_size);
-         	file->GetInfo(file, &gEfiFileInfoGuid, &file_info_size, file_info);
-          	*size = (UINTN)file_info->FileSize;
-           	*buffer = AllocatePool(*size);
-         	status = file->Read(file, size, *buffer);
-        }
+	status = file->GetInfo(file, &gEfiFileInfoGuid, &file_info_size, NULL);
+	if (status == EFI_BUFFER_TOO_SMALL) {
+		file_info = AllocatePool(file_info_size);
+		file->GetInfo(file, &gEfiFileInfoGuid, &file_info_size, file_info);
+		*size = (UINTN)file_info->FileSize;
+		*buffer = AllocatePool(*size);
+		status = file->Read(file, size, *buffer);
+	}
 
-        file->Close(file);
-        root->Close(root);
+	file->Close(file);
+	root->Close(root);
 
-        return status;
+	return status;
  }

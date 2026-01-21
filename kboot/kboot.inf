@@ -34,6 +34,7 @@
   src/cpu.c
   src/memory.c
   src/utils.c
+  src/fb.c
 
 [Packages]
   MdePkg/MdePkg.dec

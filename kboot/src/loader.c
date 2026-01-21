@@ -19,7 +19,9 @@
  * Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
  * MA  02110-1301, USA.
  */
+
 #include <Uefi.h>
+
 #include <Library/BaseLib.h>
 #include <Library/BaseMemoryLib.h>
 #include <Library/DevicePathLib.h>
@@ -57,7 +59,7 @@ EFI_STATUS EFIAPI loader_load_driver(EFI_HANDLE efi_handle, CHAR16 *driver_path)
 
 	if (EFI_ERROR(status)) {
 		err(L"error loading driver image");
-     		return status;
+		return status;
 	}
 
 	status = gBS->StartImage(driver, NULL, NULL);
@@ -89,7 +91,7 @@ EFI_STATUS loader_load_initramfs(IN CHAR16 *file_name)
 	fs->OpenVolume(fs, &root);
 	status = root->Open(root, &file, file_name, EFI_FILE_MODE_READ, 0);
 	if (EFI_ERROR(status))
-    		return status;
+		return status;
 
 	file->GetInfo(file, &gEfiFileInfoGuid, &info_size, NULL);
 	f_info = AllocatePool(info_size);
@@ -97,15 +99,15 @@ EFI_STATUS loader_load_initramfs(IN CHAR16 *file_name)
 	initrd_size = (UINTN)f_info->FileSize;
 	FreePool(f_info);
 
-    	initrd_data = AllocatePool(initrd_size);
-     	status = file->Read(file, &initrd_size, initrd_data);
+	initrd_data = AllocatePool(initrd_size);
+	status = file->Read(file, &initrd_size, initrd_data);
 
-      	file->Close(file);
-    	root->Close(root);
+	file->Close(file);
+	root->Close(root);
 
-     	dbg(__func__, L"all ok, initrd_size %d", initrd_size);
+	dbg(__func__, L"all ok, initrd_size %d", initrd_size);
 
-     	return status;
+	return status;
 }
 
 EFI_STATUS EFIAPI loader_load_linux_kernel(IN EFI_HANDLE efi_handle,
@@ -118,10 +120,10 @@ EFI_STATUS EFIAPI loader_load_linux_kernel(IN EFI_HANDLE efi_handle,
 
 	status = gBS->HandleProtocol(efi_handle, &gEfiLoadedImageProtocolGuid,
 				    (VOID **)&loaded_image);
-        if (EFI_ERROR(status)) {
-        	err(L"loading kernel: handle image protocol: %r", status);
-         	return status;
-        }
+	if (EFI_ERROR(status)) {
+		err(L"loading kernel: handle image protocol: %r", status);
+		return status;
+	}
 
 	/*
 	 * Strip away the // root, not welcome.
@@ -136,12 +138,12 @@ EFI_STATUS EFIAPI loader_load_linux_kernel(IN EFI_HANDLE efi_handle,
 	}
 
 	/* Note, this works only for efi files */
-   	status = gBS->LoadImage(FALSE, efi_handle,
-    				file_path, NULL, 0, &handle_kernel);
-    	if (EFI_ERROR(status)) {
-     		err(L"load image [%s] failed: %r", img_file_path, status);
-     		return status;
-     	}
+	status = gBS->LoadImage(FALSE, efi_handle,
+	file_path, NULL, 0, &handle_kernel);
+	if (EFI_ERROR(status)) {
+		err(L"load image [%s] failed: %r", img_file_path, status);
+		return status;
+	}
 
 	CHAR16 cmd_line[1024] = L"root=UUID=f946efca-0772-4336-a76c-eaa3e2b4f6d0 rw nouveau.debug=info nouveau.config=NvGspRm=1 nouveau.runpm=0 init=/usr/local/bin/sysghost initrd=initramfs";
 	StrCatS(cmd_line, 1024, &img_file_path[8]);
@@ -164,5 +166,5 @@ EFI_STATUS EFIAPI loader_load_linux_kernel(IN EFI_HANDLE efi_handle,
 
 	status = gBS->StartImage(handle_kernel, NULL, NULL);
 
-    	return status;
+	return status;
 }

@@ -19,6 +19,8 @@
  * MA  02110-1301, USA.
  */
 
+#include <Uefi.h>
+
 #include <Library/MemoryAllocationLib.h>
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/UefiLib.h>
