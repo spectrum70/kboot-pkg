@@ -52,10 +52,9 @@ EFI_STATUS EFIAPI cpu_print_amd_ryzen_cpu_temp(VOID)
 	return EFI_SUCCESS;
 }
 
-EFI_STATUS EFIAPI cpu_print_cpu_id(VOID)
+EFI_STATUS EFIAPI cpu_get_cpu_id(OUT CHAR8 *str_brand)
 {
 	UINT32 eax;
-	CHAR8 str_brand[49];
 	UINT32 *ptr;
 
 	ZeroMem(str_brand, sizeof(str_brand));
@@ -75,9 +74,6 @@ EFI_STATUS EFIAPI cpu_print_cpu_id(VOID)
 	AsmCpuid(0x80000003, &ptr[4], &ptr[5], &ptr[6], &ptr[7]);
 	// Leaf 0x80000004
 	AsmCpuid(0x80000004, &ptr[8], &ptr[9], &ptr[10], &ptr[11]);
-
-	// Print the result (using %a for CHAR8/ASCII string)
-	Print(L"CPU: %a\n", str_brand);
 
 	return EFI_SUCCESS;
 }

@@ -21,6 +21,7 @@
 
 #include <Uefi.h>
 
+#include <Library/PrintLib.h>
 #include <Library/UefiLib.h>
 
 #include "log.h"
@@ -29,6 +30,15 @@
 #define SIZE_KILO	1024
 #define SIZE_MEGA	(SIZE_KILO * 1024)
 #define SIZE_GIGA	(SIZE_MEGA * 1024)
+
+static VOID utils_get_size_human(UINT64 size,
+				 UINT32 *b, UINT32 *k, UINT32 *m, UINT32 *g)
+{
+	if (size) { *b = size % 1024; size /= 1024; }
+	if (size) { *k = size % 1024; size /= 1024; }
+	if (size) { *m = size % 1024; size /= 1024; }
+	if (size) { *g = size % 1024; size /= 1024; }
+}
 
 VOID utils_print_size(IN UINT64 size, IN enum p_mode mode)
 {
@@ -40,10 +50,7 @@ VOID utils_print_size(IN UINT64 size, IN enum p_mode mode)
 		size /= SIZE_MEGA;
 		Print(L"%dM", size);
 	} else {
-		if (size) { b = size % 1024; size /= 1024; }
-		if (size) { k = size % 1024; size /= 1024; }
-		if (size) { m = size % 1024; size /= 1024; }
-		if (size) { g = size % 1024; size /= 1024; }
+		utils_get_size_human(size, &b, &k, &m, &g);
 
 		if (g)
 			Print(L"%dG", g);
@@ -53,6 +60,27 @@ VOID utils_print_size(IN UINT64 size, IN enum p_mode mode)
 			Print(L", %dK", k);
 		if (b)
 			Print(L", %dB", b);
+	}
+}
+
+VOID utils_print_size_buff(OUT CHAR8 *buff, IN UINT64 size, IN enum p_mode mode)
+{
+	UINT32 b = 0, k = 0, m = 0, g = 0, n = 0;
+
+	if (mode == P_MEGA) {
+		size /= SIZE_MEGA;
+		AsciiSPrint(buff, 32, "%dM", size);
+	} else {
+		utils_get_size_human(size, &b, &k, &m, &g);
+
+		if (g)
+			n = AsciiSPrint(buff, 32, "%dG", g);
+		if (m)
+			n += AsciiSPrint(&buff[n], 32, "%dM", m);
+		if (k)
+			n += AsciiSPrint(&buff[n], 32, "%dK", k);
+		if (b)
+			AsciiSPrint(&buff[n], 32, "%dB", b);
 	}
 }
 

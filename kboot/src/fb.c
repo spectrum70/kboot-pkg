@@ -108,12 +108,16 @@ VOID EFIAPI fb_draw_line(IN EFI_GRAPHICS_OUTPUT_PROTOCOL *gop,
 	}
 }
 
-VOID EFIAPI fb_draw_pixel(UINTN x, UINTN y, UINT32 color)
+VOID EFIAPI fb_draw_lcd_pixel(UINTN x, UINTN y, UINT32 color)
 {
 	UINTN ix, sx, sy;
 
-	sx = x + 16;
-	sy = y + 16;
+	/*
+	 * Keeping pixels to a nice fixed visible size.
+	 * Pized width + sep should be pair.
+	 */
+	sx = x + FB_LCD_PIXEL_HW;
+	sy = y + FB_LCD_PIXEL_HW;
 
 	for (; y < sy; y++) {
 		for (ix = x; ix < sx; ix++) {

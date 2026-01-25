@@ -23,11 +23,13 @@
 
 #include <Library/BmpSupportLib.h>
 #include <Library/PcdLib.h>
+#include <Library/PrintLib.h>
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/UefiRuntimeServicesTableLib.h>
 #include <Library/UefiLib.h>
 #include <Pi/PiFirmwareFile.h>
 #include <Protocol/GraphicsOutput.h>
+#include <Protocol/LockBox.h>
 #include <Protocol/SimpleTextOut.h>
 
 #include "cpu.h"
@@ -42,15 +44,59 @@
 
 #include "lcd.c"
 
-#define MENU_START_ROW	15
+#define MAX_LCD_COLS	320
+
+#define MENU_START_ROW	10
 #define MENU_X_COL	7
 
-#define LCD_PIXEL_ROWS	7
+#define LCD_CHAR_ROWS	7
+#define LCD_CHAR_COLS	5
+#define LCD_PIXEL_SEP	1
+#define LCD_CHAR_SEP	2
+#define LCD_ROW_SEP	3
+#define LCD_PIXEL_STEP	(FB_LCD_PIXEL_HW + LCD_PIXEL_SEP)
+#define LCD_CHAR_NEXT	((LCD_PIXEL_STEP * LCD_CHAR_COLS) + LCD_CHAR_SEP)
+#define LCD_ROW_NEXT	((LCD_PIXEL_STEP * LCD_CHAR_ROWS) + LCD_ROW_SEP)
 
-#define PROGRESS_POS_X	690
-#define PROGRESS_POS_Y  74
+#define PROGRESS_POS_X	42
+#define PROGRESS_POS_Y  245
 
 static int selected;
+static int lcd_line_cols;
+static int lcd_line_rows;
+static int lcd_cursor_row;
+
+static int countdown = 15;
+static int prog_step_chars;
+static int inverted;
+
+static EFI_LOCK  p_lock;
+
+EFI_STATUS menu_get_current_mode(OUT UINTN *columns, OUT UINTN *rows)
+{
+	EFI_STATUS status;
+	INT32 current_mode;
+
+	current_mode = gST->ConOut->Mode->Mode;
+
+	status = gST->ConOut->QueryMode(gST->ConOut, current_mode,
+					columns, rows);
+
+	return status;
+}
+
+EFI_STATUS menu_get_pixel_size(EFI_GRAPHICS_OUTPUT_PROTOCOL *gop,
+			       OUT UINT32 *pixel_width,
+			       OUT UINT32 *pixel_height)
+{
+	if (gop->Mode != NULL && gop->Mode->Info != NULL) {
+		*pixel_width  = gop->Mode->Info->HorizontalResolution;
+		*pixel_height = gop->Mode->Info->VerticalResolution;
+		return EFI_SUCCESS;
+	}
+
+	return EFI_NOT_FOUND;
+}
 
 EFI_STATUS menu_draw_image(IN EFI_GRAPHICS_OUTPUT_PROTOCOL *gop,
 			   IN VOID *bmp_data, IN UINTN bmp_size)
@@ -73,31 +119,28 @@ EFI_STATUS menu_draw_image(IN EFI_GRAPHICS_OUTPUT_PROTOCOL *gop,
 	return status;
 }
 
-EFI_STATUS menu_show_lcd_num(UINTN xpos, UINTN ypos, UINTN n)
+EFI_STATUS menu_show_lcd_char(UINTN xpos, UINTN ypos, UINTN c)
 {
-	UINTN i, x, y, f, s;
-	UINT32 green = 0x00ffdda3;
-	UINT32 dark = 0x00333333;
+	UINTN i, x, y;
+	UINT32 orange = 0x00ffa500;
+	UINT32 dark = 0x00070707;
 
-	f = n / 10;
-	s = n % 10;
-
-	for (i = 0, y = ypos; i < LCD_PIXEL_ROWS; ++i, y += 18) {
-		x = xpos;
-		fb_draw_pixel(x += 18, y, lcd_n[f][i] & 16 ? green : dark);
-		fb_draw_pixel(x += 18, y, lcd_n[f][i] & 8 ? green : dark);
-		fb_draw_pixel(x += 18, y, lcd_n[f][i] & 4 ? green : dark);
-		fb_draw_pixel(x += 18, y, lcd_n[f][i] & 2 ? green : dark);
-		fb_draw_pixel(x += 18, y, lcd_n[f][i] & 1 ? green : dark);
+	if (inverted) {
+		UINT32 temp = orange;
+		orange = dark, dark = temp;
 	}
 
-	for (i = 0, y = ypos; i < LCD_PIXEL_ROWS; ++i, y += 18) {
-		x = xpos + 18 * 5 + 7;
-		fb_draw_pixel(x += 18, y, lcd_n[s][i] & 16 ? green : dark);
-		fb_draw_pixel(x += 18, y, lcd_n[s][i] & 8 ? green : dark);
-		fb_draw_pixel(x += 18, y, lcd_n[s][i] & 4 ? green : dark);
-		fb_draw_pixel(x += 18, y, lcd_n[s][i] & 2 ? green : dark);
-		fb_draw_pixel(x += 18, y, lcd_n[s][i] & 1 ? green : dark);
+	for (i = 0, y = ypos; i < LCD_CHAR_ROWS; ++i, y += LCD_PIXEL_STEP) {
+		x = xpos;
+		fb_draw_lcd_pixel(x, y, lcd_n[c][i] & 16 ? orange : dark);
+		x += LCD_PIXEL_STEP;
+		fb_draw_lcd_pixel(x, y, lcd_n[c][i] & 8 ? orange : dark);
+		x += LCD_PIXEL_STEP;
+		fb_draw_lcd_pixel(x, y, lcd_n[c][i] & 4 ? orange : dark);
+		x += LCD_PIXEL_STEP;
+		fb_draw_lcd_pixel(x, y, lcd_n[c][i] & 2 ? orange : dark);
+		x += LCD_PIXEL_STEP;
+		fb_draw_lcd_pixel(x, y, lcd_n[c][i] & 1 ? orange : dark);
 	}
 
 	return EFI_SUCCESS;
@@ -129,56 +172,132 @@ EFI_STATUS menu_get_name(IN CHAR16 *path_name, OUT CHAR16 **ptr)
 	return EFI_SUCCESS;
 }
 
-static int countdown = 15;
-
-static VOID menu_update_progress(UINT32 x, UINT32 y)
+VOID EFIAPI menu_set_lcd_pos(UINTN col, UINTN row)
 {
-	menu_show_lcd_num(x, y, countdown);
+	lcd_cursor_row = row * LCD_ROW_NEXT;
+}
+
+VOID menu_write_lcd_line(UINTN x, UINTN y, CHAR8 *str)
+{
+	int i = 0;
+
+	while (*str && i++ < lcd_line_cols) {
+		menu_show_lcd_char(x, y, *str++);
+		x += LCD_CHAR_NEXT;
+	}
+	while (i++ < lcd_line_cols) {
+		menu_show_lcd_char(x, y, ' ');
+		x += LCD_CHAR_NEXT;
+	}
+	lcd_cursor_row += LCD_ROW_NEXT;
+}
+
+VOID EFIAPI menu_print_line(IN CONST CHAR8 *msg, ...)
+{
+	CHAR8 line[MAX_LCD_COLS] = {0};
+	VA_LIST list;
+
+	VA_START(list, msg);
+	AsciiVSPrint(line, MAX_LCD_COLS, msg, list);
+	VA_END(list);
+
+	menu_write_lcd_line(0, lcd_cursor_row, line);
 }
 
 VOID menu_entries_display(struct fs_file_details entries[MAX_BOOT_ENTRIES],
 			  IN UINTN row)
 {
 	UINTN i = 0;
-  	EFI_STATUS status;
+	EFI_STATUS status;
+	static CHAR8 line[MAX_LCD_COLS];
 
 	while (entries[i].device_handle) {
 		CHAR16 *name;
 
-		gST->ConOut->SetCursorPosition(gST->ConOut, MENU_X_COL, ++row);
-		if (i == selected)
-			gST->ConOut->SetAttribute(gST->ConOut,
-			    EFI_TEXT_ATTR(EFI_BLACK, EFI_LIGHTGRAY));
-		else
-			gST->ConOut->SetAttribute(gST->ConOut,
-			    EFI_TEXT_ATTR(EFI_LIGHTGRAY, EFI_BLACK));
+		menu_set_lcd_pos(0, row + i);
 
 		status = menu_get_name(entries[i].path_name, &name);
 		if (!EFI_ERROR(status)) {
-			Print(L"[");
-			if (i == selected)
-				gST->ConOut->SetAttribute(gST->ConOut,
-				    EFI_TEXT_ATTR(EFI_BLACK, EFI_BLUE));
-			Print(L" ");
-			if (i == selected)
-				gST->ConOut->SetAttribute(gST->ConOut,
-				    EFI_TEXT_ATTR(EFI_BLACK, EFI_LIGHTGRAY));
-			Print(L"] %04d-%02d-%02d %02d:%02d:%02d",
+
+
+			AsciiSPrint(line, MAX_LCD_COLS, " [");
+			line[2] = (i == selected) ? '*' : ' ';
+
+			AsciiSPrint(&line[3], MAX_LCD_COLS,
+				"] %04d-%02d-%02d %02d:%02d:%02d  %s",
 				entries[i].creation_time.Year,
 				entries[i].creation_time.Month,
 				entries[i].creation_time.Day,
 				entries[i].creation_time.Hour,
 				entries[i].creation_time.Minute,
-				entries[i].creation_time.Second
+				entries[i].creation_time.Second,
+				name
 			);
-			Print(L"  %s", name);
+
+			EfiAcquireLock(&p_lock);
+			inverted = (i == selected) ? 1 : 0;
+			menu_print_line(line);
+			inverted = 0;
+			EfiReleaseLock(&p_lock);
 		}
 
 		i++;
 	}
-	Print(L"\n");
 
 	gST->ConOut->EnableCursor(gST->ConOut, FALSE);
+}
+
+VOID EFIAPI menu_print_status_top()
+{
+	EFI_TIME time;
+	UINTN n = 0;
+	static CHAR8 line[MAX_LCD_COLS] = {0};
+
+	while (n < (lcd_line_cols - 19))
+		AsciiSPrint(&line[n++], MAX_LCD_COLS, " ");
+
+	gRT->GetTime(&time, 0);
+
+	AsciiSPrint(&line[n], MAX_LCD_COLS, "%02d-%02d-%04d %02d:%02d:%02d",
+		    time.Day,
+		    time.Month,
+		    time.Year,
+		    time.Hour,
+		    time.Minute,
+		    time.Second);
+
+	menu_write_lcd_line(0, 0, line);
+}
+
+VOID EFIAPI menu_print_progress()
+{
+	CHAR8 line[MAX_LCD_COLS] = {0};
+	int i, q, x;
+
+	AsciiSPrint(line, MAX_LCD_COLS, "%02d ", countdown);
+
+	for (i = 3, q = 0; q < countdown; i += prog_step_chars, q++) {
+		for (x = 0; x < prog_step_chars; x++)
+			line[i + x] = CHAR_INV;
+	}
+
+	menu_print_line(line);
+}
+
+VOID EFIAPI menu_time_sec_callback(IN EFI_EVENT event, IN VOID *context)
+{
+	EfiAcquireLock(&p_lock);
+
+	menu_set_lcd_pos(0, 0);
+	menu_print_status_top();
+
+	menu_set_lcd_pos(0, lcd_line_rows - 1);
+	menu_print_progress();
+
+	EfiReleaseLock(&p_lock);
+
+	if (countdown > 0)
+		countdown--;
 }
 
 EFI_STATUS menu_read_key(OUT EFI_INPUT_KEY *key)
@@ -190,36 +309,17 @@ EFI_STATUS menu_read_key(OUT EFI_INPUT_KEY *key)
 	return gST->ConIn->ReadKeyStroke(gST->ConIn, key);
 }
 
-VOID EFIAPI menu_time_sec_callback(IN EFI_EVENT event, IN VOID *context)
-{
-	EFI_TIME time;
-
-	// Retrieve the current time and date from the hardware
-	gRT->GetTime(&time, NULL);
-
-	if (countdown >= 0) {
-		menu_update_progress(PROGRESS_POS_X, PROGRESS_POS_Y);
-		countdown--;
-	}
-
-	menu_show_lcd_num(PROGRESS_POS_X + 240, PROGRESS_POS_Y, time.Day);
-	menu_show_lcd_num(PROGRESS_POS_X + 440, PROGRESS_POS_Y, time.Month);
-	menu_show_lcd_num(PROGRESS_POS_X + 640, PROGRESS_POS_Y,
-			  time.Year - 2000);
-	menu_show_lcd_num(PROGRESS_POS_X + 860, PROGRESS_POS_Y, time.Hour);
-	menu_show_lcd_num(PROGRESS_POS_X + 1060, PROGRESS_POS_Y, time.Minute);
-	menu_show_lcd_num(PROGRESS_POS_X + 1260, PROGRESS_POS_Y, time.Second);
-}
-
 EFI_STATUS menu_exec(IN EFI_HANDLE img_handle)
 {
 	struct fs_file_details entries[MAX_BOOT_ENTRIES] = {0};
 	EFI_GRAPHICS_OUTPUT_PROTOCOL *gop;
 	EFI_INPUT_KEY key;
+	CHAR8 line[MAX_LCD_COLS];
 	UINTN i = 0, total_entries = 0;
-	UINTN bmp_size, row;
+	UINTN row;
+	UINT32 p_width, p_height;
 	UINT64 total_memory;
-	VOID *bmp_data;
+	//VOID *bmp_data;
 	EFI_EVENT periodic_event;
 	EFI_STATUS status;
 
@@ -227,9 +327,22 @@ EFI_STATUS menu_exec(IN EFI_HANDLE img_handle)
 				     NULL, (VOID **)&gop);
 	if (EFI_ERROR(status))
 		return status;
+
+	EfiInitializeLock(&p_lock, TPL_CALLBACK);
+
 	fb_init(gop);
 
+	status = menu_get_pixel_size(gop, &p_width, &p_height);
+	if (EFI_ERROR(status))
+		return status;
+
+	lcd_line_cols = p_width / LCD_CHAR_NEXT;
+	lcd_line_rows = p_height / LCD_ROW_NEXT;
+	prog_step_chars = (lcd_line_cols - 3) / countdown;
+
 	gST->ConOut->ClearScreen(gST->ConOut);
+
+	menu_print_status_top();
 
 	status = fs_get_boot_entries(img_handle, entries);
 	if (EFI_ERROR(status)) {
@@ -237,46 +350,42 @@ EFI_STATUS menu_exec(IN EFI_HANDLE img_handle)
 		return status;
 	}
 
-	status = menu_load_bitmap(&bmp_data, &bmp_size);
-	if (EFI_ERROR(status)) {
-		err(L"bitmap not found, status = %d", status);
-	}
+	menu_print_line("");
+	menu_print_line(" kboot v.%a - (c) 2026, Kernelspace", version);
+	menu_print_line("");
+	menu_print_line("");
+	memory_get_total(&total_memory);
+	utils_print_size_buff(line, total_memory, P_MEGA);
+	menu_print_line(" Total memory: %a", line);
+	cpu_get_cpu_id(line);
+	menu_print_line(" CPU: %a", line);
+	menu_print_line("");
+	menu_print_line(" Select image to boot ...");
+	menu_print_line("");
 
-	status = menu_draw_image(gop, bmp_data, bmp_size);
-	if (EFI_ERROR(status)) {
-		err(L"cannot display bitmap, status = %d", status);
-	}
+	menu_print_progress();
 
 	while (entries[i++].device_handle != 0)
 		total_entries++;
 
-	memory_get_total(&total_memory);
-
-	row = MENU_START_ROW;
-	/* One line sep after title. */
-	gST->ConOut->SetCursorPosition(gST->ConOut, MENU_X_COL, row++);
-
-	gST->ConOut->SetAttribute(gST->ConOut, EFI_TEXT_ATTR(EFI_YELLOW, EFI_BLACK));
-	Print(L"kboot v." version " - (C) 2026, Kernelspace\n");
-
-	gST->ConOut->SetCursorPosition(gST->ConOut, MENU_X_COL, ++row);
-	cpu_print_cpu_id();
-
-	gST->ConOut->SetCursorPosition(gST->ConOut, MENU_X_COL, ++row);
-	Print(L"Total memory: ");
-	memory_get_total(&total_memory);
-	utils_print_size(total_memory, P_MEGA);
-
 	status = gBS->CreateEvent(EVT_TIMER | EVT_NOTIFY_SIGNAL,
 				  TPL_CALLBACK, menu_time_sec_callback,
 				  gop, &periodic_event);
-
 	if (!EFI_ERROR(status)) {
 		status = gBS->SetTimer(periodic_event, TimerPeriodic, 10000000);
 	}
 
-	/* One line sep from info. */
-	row++;
+	//status = menu_load_bitmap(&bmp_data, &bmp_size);
+	//if (EFI_ERROR(status)) {
+	//	err(L"bitmap not found, status = %d", status);
+	//}
+
+	//status = menu_draw_image(gop, bmp_data, bmp_size);
+	//if (EFI_ERROR(status)) {
+	//	err(L"cannot display bitmap, status = %d", status);
+	//}
+	//
+	row = MENU_START_ROW;
 
 	for(;;) {
 		menu_entries_display(entries, row);
@@ -291,9 +400,8 @@ EFI_STATUS menu_exec(IN EFI_HANDLE img_handle)
 				selected++;
 			break;
 		case 0:
-			gST->ConOut->SetCursorPosition(gST->ConOut,
-					MENU_X_COL, row + total_entries + 5);
-			Print(L"Loading kernel ...");
+			menu_set_lcd_pos(0, row + total_entries + 3);
+			menu_print_line("    Loading kernel ...");
 			status = loader_load_linux_kernel(
 				img_handle,
 				entries[selected].path_name);
