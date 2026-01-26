@@ -35,20 +35,25 @@
   src/memory.c
   src/utils.c
   src/fb.c
+  src/firmware.c
 
 [Packages]
   MdePkg/MdePkg.dec
   MdeModulePkg/MdeModulePkg.dec
+  EmulatorPkg/EmulatorPkg.dec
 
 [LibraryClasses]
   BmpSupportLib
   DxeServiceLib
   FileHandleLib
   PciLib
+  SmbiosLib
   UefiApplicationEntryPoint
   UefiLib
+  UefiBootServicesTableLib
 
 [Guids]
+
 
 [Ppis]
 
@@ -59,6 +64,6 @@
   gEfiPartitionInfoProtocolGuid
   gEfiGraphicsOutputProtocolGuid
   gEfiLoadFile2ProtocolGuid
+  gEfiSmbiosProtocolGuid
 
 [Binaries.common]
-BIN|images/kboot.bmp|*

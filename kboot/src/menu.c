@@ -28,17 +28,19 @@
 #include <Library/UefiRuntimeServicesTableLib.h>
 #include <Library/UefiLib.h>
 #include <Pi/PiFirmwareFile.h>
+#include <Protocol/FirmwareManagement.h>
 #include <Protocol/GraphicsOutput.h>
 #include <Protocol/LockBox.h>
 #include <Protocol/SimpleTextOut.h>
 
 #include "cpu.h"
+#include "fb.h"
+#include "firmware.h"
+#include "fs.h"
 #include "loader.h"
 #include "log.h"
 #include "memory.h"
 #include "menu.h"
-#include "fb.h"
-#include "fs.h"
 #include "utils.h"
 #include "version.h"
 
@@ -46,7 +48,7 @@
 
 #define MAX_LCD_COLS	320
 
-#define MENU_START_ROW	10
+#define MENU_START_ROW	16
 #define MENU_X_COL	7
 
 #define LCD_CHAR_ROWS	7
@@ -309,17 +311,32 @@ EFI_STATUS menu_read_key(OUT EFI_INPUT_KEY *key)
 	return gST->ConIn->ReadKeyStroke(gST->ConIn, key);
 }
 
+VOID menu_print_logo(VOID)
+{
+	menu_print_line(" %c    %c              %c",
+		31, 31, 31);
+	menu_print_line(" %c %c%c %c              %c%c%c",
+		31, 30, 29, 31, 31, 31, 29);
+	menu_print_line(" %c%c%c  %c%c%c%c %c%c%c%c %c%c%c%c %c",
+		31, 31, 29, 31, 31, 31, 27, 30, 31, 31, 27, 30, 31, 31, 27, 31);
+	menu_print_line(" %c%c%c  %c  %c %c  %c %c  %c %c",
+		31, 28, 27, 31, 31, 31, 31, 31, 31, 31);
+	menu_print_line(" %c %c%c %c%c%c%c %c%c%c%c %c%c%c%c %c%c%c",
+		31, 28, 27, 28, 31, 31, 29, 28, 31, 31,
+		29, 28, 31, 31, 29, 28, 31, 29);
+}
+
 EFI_STATUS menu_exec(IN EFI_HANDLE img_handle)
 {
 	struct fs_file_details entries[MAX_BOOT_ENTRIES] = {0};
 	EFI_GRAPHICS_OUTPUT_PROTOCOL *gop;
 	EFI_INPUT_KEY key;
 	CHAR8 line[MAX_LCD_COLS];
+	CHAR8 fw_ver[256];
 	UINTN i = 0, total_entries = 0;
 	UINTN row;
 	UINT32 p_width, p_height;
 	UINT64 total_memory;
-	//VOID *bmp_data;
 	EFI_EVENT periodic_event;
 	EFI_STATUS status;
 
@@ -350,15 +367,20 @@ EFI_STATUS menu_exec(IN EFI_HANDLE img_handle)
 		return status;
 	}
 
+	menu_print_logo();
+
 	menu_print_line("");
-	menu_print_line(" kboot v.%a - (c) 2026, Kernelspace", version);
+	menu_print_line(" v.%a - (c) 2026, Kernelspace", version);
 	menu_print_line("");
 	menu_print_line("");
+	cpu_get_cpu_id(line);
+	menu_print_line(" CPU: %a", line);
 	memory_get_total(&total_memory);
 	utils_print_size_buff(line, total_memory, P_MEGA);
 	menu_print_line(" Total memory: %a", line);
-	cpu_get_cpu_id(line);
-	menu_print_line(" CPU: %a", line);
+	firmware_get_mb_version(fw_ver);
+	menu_print_line(" Motherboard fw version: %a", fw_ver);
+
 	menu_print_line("");
 	menu_print_line(" Select image to boot ...");
 	menu_print_line("");
@@ -375,16 +397,6 @@ EFI_STATUS menu_exec(IN EFI_HANDLE img_handle)
 		status = gBS->SetTimer(periodic_event, TimerPeriodic, 10000000);
 	}
 
-	//status = menu_load_bitmap(&bmp_data, &bmp_size);
-	//if (EFI_ERROR(status)) {
-	//	err(L"bitmap not found, status = %d", status);
-	//}
-
-	//status = menu_draw_image(gop, bmp_data, bmp_size);
-	//if (EFI_ERROR(status)) {
-	//	err(L"cannot display bitmap, status = %d", status);
-	//}
-	//
 	row = MENU_START_ROW;
 
 	for(;;) {
@@ -401,7 +413,7 @@ EFI_STATUS menu_exec(IN EFI_HANDLE img_handle)
 			break;
 		case 0:
 			menu_set_lcd_pos(0, row + total_entries + 3);
-			menu_print_line("    Loading kernel ...");
+			menu_print_line("     Loading kernel ...");
 			status = loader_load_linux_kernel(
 				img_handle,
 				entries[selected].path_name);

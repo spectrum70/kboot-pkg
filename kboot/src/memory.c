@@ -52,8 +52,8 @@ EFI_STATUS memory_get_total(OUT UINT64 *total_bytes)
 		EFI_MEMORY_DESCRIPTOR *desc =
 			(EFI_MEMORY_DESCRIPTOR *)((UINT8 *)memory_map +
 				(index * descriptor_size));
-     		if (desc->Type == EfiReservedMemoryType)
-       			continue;
+		if (desc->Type == EfiReservedMemoryType)
+			continue;
 		total_pages += desc->NumberOfPages;
 	}
 
