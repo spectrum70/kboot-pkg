@@ -206,8 +206,7 @@ VOID EFIAPI menu_print_line(IN CONST CHAR8 *msg, ...)
 	menu_write_lcd_line(0, lcd_cursor_row, line);
 }
 
-VOID menu_entries_display(struct fs_file_details entries[MAX_BOOT_ENTRIES],
-			  IN UINTN row)
+VOID menu_entries_display(struct fs_file_details entries[MAX_BOOT_ENTRIES])
 {
 	UINTN i = 0;
 	EFI_STATUS status;
@@ -216,7 +215,7 @@ VOID menu_entries_display(struct fs_file_details entries[MAX_BOOT_ENTRIES],
 	while (entries[i].device_handle) {
 		CHAR16 *name;
 
-		menu_set_lcd_pos(0, row + i);
+		menu_set_lcd_pos(0, MENU_START_ROW + i);
 
 		status = menu_get_name(entries[i].path_name, &name);
 		if (!EFI_ERROR(status)) {
@@ -326,19 +325,49 @@ VOID menu_print_logo(VOID)
 		29, 28, 31, 31, 29, 28, 31, 29);
 }
 
+EFI_STATUS menu_setup_header(VOID)
+{
+	CHAR8 line[MAX_LCD_COLS];
+	CHAR8 fw_info[64];
+	UINT64 total_memory;
+	EFI_STATUS status;
+
+	menu_print_status_top();
+	menu_print_logo();
+
+	menu_print_line("");
+	menu_print_line(" v.%a - (c) 2026, Kernelspace", version);
+	menu_print_line("");
+	menu_print_line("");
+	cpu_get_cpu_id(line);
+	menu_print_line(" CPU: %a", line);
+	status = memory_get_total(&total_memory);
+	if (EFI_ERROR(status))
+		return status;
+
+	utils_print_size_buff(line, total_memory, P_MEGA);
+	menu_print_line(" Total memory: %a", line);
+	status = firmware_get_mb_info(fw_info);
+	if (EFI_ERROR(status))
+		return status;
+
+	menu_print_line(" Firmware name/version: %a", fw_info);
+	menu_print_line("");
+	menu_print_line(" Select image to boot ...");
+	menu_print_line("");
+
+	return EFI_SUCCESS;
+}
+
 EFI_STATUS menu_exec(IN EFI_HANDLE img_handle)
 {
 	struct fs_file_details entries[MAX_BOOT_ENTRIES] = {0};
 	EFI_GRAPHICS_OUTPUT_PROTOCOL *gop;
 	EFI_INPUT_KEY key;
-	CHAR8 line[MAX_LCD_COLS];
-	CHAR8 fw_ver[256];
-	UINTN i = 0, total_entries = 0;
-	UINTN row;
-	UINT32 p_width, p_height;
-	UINT64 total_memory;
 	EFI_EVENT periodic_event;
 	EFI_STATUS status;
+	UINT32 p_width, p_height;
+	UINTN i = 0, total_entries = 0;
 
 	status = gBS->LocateProtocol(&gEfiGraphicsOutputProtocolGuid,
 				     NULL, (VOID **)&gop);
@@ -359,33 +388,13 @@ EFI_STATUS menu_exec(IN EFI_HANDLE img_handle)
 
 	gST->ConOut->ClearScreen(gST->ConOut);
 
-	menu_print_status_top();
+	menu_setup_header();
 
 	status = fs_get_boot_entries(img_handle, entries);
 	if (EFI_ERROR(status)) {
 		err(L"getting boot entries\n");
 		return status;
 	}
-
-	menu_print_logo();
-
-	menu_print_line("");
-	menu_print_line(" v.%a - (c) 2026, Kernelspace", version);
-	menu_print_line("");
-	menu_print_line("");
-	cpu_get_cpu_id(line);
-	menu_print_line(" CPU: %a", line);
-	memory_get_total(&total_memory);
-	utils_print_size_buff(line, total_memory, P_MEGA);
-	menu_print_line(" Total memory: %a", line);
-	firmware_get_mb_version(fw_ver);
-	menu_print_line(" Motherboard fw version: %a", fw_ver);
-
-	menu_print_line("");
-	menu_print_line(" Select image to boot ...");
-	menu_print_line("");
-
-	menu_print_progress();
 
 	while (entries[i++].device_handle != 0)
 		total_entries++;
@@ -397,10 +406,10 @@ EFI_STATUS menu_exec(IN EFI_HANDLE img_handle)
 		status = gBS->SetTimer(periodic_event, TimerPeriodic, 10000000);
 	}
 
-	row = MENU_START_ROW;
+	menu_print_progress();
 
 	for(;;) {
-		menu_entries_display(entries, row);
+		menu_entries_display(entries);
 		menu_read_key(&key);
 		switch (key.ScanCode) {
 		case 1:
@@ -412,7 +421,7 @@ EFI_STATUS menu_exec(IN EFI_HANDLE img_handle)
 				selected++;
 			break;
 		case 0:
-			menu_set_lcd_pos(0, row + total_entries + 3);
+			menu_set_lcd_pos(0, MENU_START_ROW + total_entries + 5);
 			menu_print_line("     Loading kernel ...");
 			status = loader_load_linux_kernel(
 				img_handle,
