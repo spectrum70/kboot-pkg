@@ -53,7 +53,9 @@
   UefiBootServicesTableLib
 
 [Guids]
-
+  gEfiAcpiTableGuid
+  gEfiAcpi10TableGuid
+  gEfiAcpi20TableGuid
 
 [Ppis]
 
@@ -65,5 +67,6 @@
   gEfiGraphicsOutputProtocolGuid
   gEfiLoadFile2ProtocolGuid
   gEfiSmbiosProtocolGuid
+  gEfiFormBrowser2ProtocolGuid
 
 [Binaries.common]

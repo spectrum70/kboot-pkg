@@ -45,7 +45,7 @@ EFI_STATUS EFIAPI firmware_get_mb_info(OUT CHAR8 *fw_info)
 
 	while ((status = smbios->GetNext(smbios, &handle, NULL, &record, NULL))
 		== EFI_SUCCESS) {
-		if (record->Type == 0) {
+		if (record->Type == EFI_SMBIOS_TYPE_BIOS_INFORMATION) {
 			UINT8 idx_name = *(UINT8*)((UINT8*)record + 0x04);
 			UINT8 idx_ver = *(UINT8*)((UINT8*)record + 0x05);
 

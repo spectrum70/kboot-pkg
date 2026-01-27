@@ -29,6 +29,7 @@
 #include <Library/UefiLib.h>
 #include <Pi/PiFirmwareFile.h>
 #include <Protocol/FirmwareManagement.h>
+#include <Protocol/FormBrowser2.h>
 #include <Protocol/GraphicsOutput.h>
 #include <Protocol/LockBox.h>
 #include <Protocol/SimpleTextOut.h>
@@ -73,6 +74,36 @@ static int prog_step_chars;
 static int inverted;
 
 static EFI_LOCK  p_lock;
+
+VOID menu_set_osind_and_reset()
+{
+	UINT64 osind = EFI_OS_INDICATIONS_BOOT_TO_FW_UI;
+
+	gRT->SetVariable(L"OsIndications", &gEfiGlobalVariableGuid,
+		EFI_VARIABLE_NON_VOLATILE | EFI_VARIABLE_BOOTSERVICE_ACCESS |
+		EFI_VARIABLE_RUNTIME_ACCESS,
+		sizeof(osind), &osind);
+
+	gRT->ResetSystem(EfiResetCold, EFI_SUCCESS, 0, NULL);
+}
+
+EFI_STATUS menu_osind_supported(VOID)
+{
+	UINT64 osind_supported;
+	UINTN size = sizeof(osind_supported);
+	EFI_STATUS status;
+
+	status = gRT->GetVariable(L"OsIndicationsSupported",
+				  &gEfiGlobalVariableGuid,
+				  NULL, &size, &osind_supported);
+
+	if (EFI_ERROR(status) ||
+		!(osind_supported & EFI_OS_INDICATIONS_BOOT_TO_FW_UI)) {
+			return EFI_UNSUPPORTED;
+	}
+
+	return status;
+}
 
 EFI_STATUS menu_get_current_mode(OUT UINTN *columns, OUT UINTN *rows)
 {
@@ -275,9 +306,9 @@ VOID EFIAPI menu_print_progress()
 	CHAR8 line[MAX_LCD_COLS] = {0};
 	int i, q, x;
 
-	AsciiSPrint(line, MAX_LCD_COLS, "%02d ", countdown);
+	AsciiSPrint(line, MAX_LCD_COLS, " %02d ", countdown);
 
-	for (i = 3, q = 0; q < countdown; i += prog_step_chars, q++) {
+	for (i = 4, q = 0; q < countdown; i += prog_step_chars, q++) {
 		for (x = 0; x < prog_step_chars; x++)
 			line[i + x] = CHAR_INV;
 	}
@@ -356,6 +387,11 @@ EFI_STATUS menu_setup_header(VOID)
 	menu_print_line(" Select image to boot ...");
 	menu_print_line("");
 
+	menu_set_lcd_pos(0, lcd_line_rows - 2);
+	menu_print_line(" F1 Power off    %aF3 Reboot",
+			menu_osind_supported() != EFI_UNSUPPORTED ?
+			"F2 Bios Setup   " : "");
+
 	return EFI_SUCCESS;
 }
 
@@ -384,11 +420,13 @@ EFI_STATUS menu_exec(IN EFI_HANDLE img_handle)
 
 	lcd_line_cols = p_width / LCD_CHAR_NEXT;
 	lcd_line_rows = p_height / LCD_ROW_NEXT;
-	prog_step_chars = (lcd_line_cols - 3) / countdown;
+	prog_step_chars = (lcd_line_cols - 4) / countdown;
 
 	gST->ConOut->ClearScreen(gST->ConOut);
 
 	menu_setup_header();
+
+	gST->ConOut->EnableCursor(gST->ConOut, FALSE);
 
 	status = fs_get_boot_entries(img_handle, entries);
 	if (EFI_ERROR(status)) {
@@ -423,14 +461,24 @@ EFI_STATUS menu_exec(IN EFI_HANDLE img_handle)
 		case 0:
 			menu_set_lcd_pos(0, MENU_START_ROW + total_entries + 5);
 			menu_print_line("     Loading kernel ...");
-			status = loader_load_linux_kernel(
-				img_handle,
-				entries[selected].path_name);
+			status = loader_load_linux_kernel(img_handle,
+					entries[selected].path_name);
 			if (EFI_ERROR(status)) {
 				err(L"cannot boot image %s",
 				    entries[selected].path_name);
 				for(;;);
 			}
+			break;
+		case SCAN_F1:
+			gRT->ResetSystem(EfiResetShutdown,
+					 EFI_SUCCESS, 0, NULL);
+			break;
+		case SCAN_F2:
+			if (menu_osind_supported() != EFI_UNSUPPORTED)
+				menu_set_osind_and_reset();
+			break;
+		case SCAN_F3:
+			gRT->ResetSystem(EfiResetWarm, EFI_SUCCESS, 0, NULL);
 			break;
 		default:
 			break;
