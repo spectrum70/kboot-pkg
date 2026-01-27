@@ -32,34 +32,36 @@
 
 #include "log.h"
 
-EFI_STATUS EFIAPI firmware_get_mb_version(OUT CHAR8 *version) {
+EFI_STATUS EFIAPI firmware_get_mb_info(OUT CHAR8 *fw_info)
+{
 	EFI_SMBIOS_PROTOCOL *smbios;
 	EFI_SMBIOS_HANDLE handle = SMBIOS_HANDLE_PI_RESERVED;
 	EFI_SMBIOS_TABLE_HEADER *record;
-	CHAR8 *version_string;
+	EFI_STATUS status;
+	CHAR8 *info_string;
 	int n;
 
 	gBS->LocateProtocol(&gEfiSmbiosProtocolGuid, NULL, (VOID**)&smbios);
 
-	while (smbios->GetNext(smbios, &handle, NULL, &record, NULL)
+	while ((status = smbios->GetNext(smbios, &handle, NULL, &record, NULL))
 		== EFI_SUCCESS) {
 		if (record->Type == 0) {
 			UINT8 idx_name = *(UINT8*)((UINT8*)record + 0x04);
 			UINT8 idx_ver = *(UINT8*)((UINT8*)record + 0x05);
 
-			version_string = SmbiosLibReadString(record, idx_name);
-			if (version_string != NULL) {
-				n = AsciiSPrint(version, 64, "%a ",
-						version_string);
+			info_string = SmbiosLibReadString(record, idx_name);
+			if (info_string != NULL) {
+				n = AsciiSPrint(fw_info, 64, "%a ",
+						info_string);
 			}
-			version_string = SmbiosLibReadString(record, idx_ver);
-			if (version_string != NULL) {
-				AsciiSPrint(&version[n], 64, "%a",
-					    version_string);
+			info_string = SmbiosLibReadString(record, idx_ver);
+			if (info_string != NULL) {
+				AsciiSPrint(&fw_info[n], 64, "%a",
+					    info_string);
 			}
 			break;
 		}
 	}
 
-	return EFI_SUCCESS;
+	return status;
 }
