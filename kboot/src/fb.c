@@ -25,9 +25,12 @@
 #include <Protocol/GraphicsOutput.h>
 
 #include "fb.h"
+#include "font_gfx.h"
 
 static UINT32 *fb;
 static UINT32 scan_line;
+static UINT32 color;
+static BOOLEAN inverted;
 
 #define diether_border_d(x) (((x & 0xff) + 0x15) | ((x & 0xff00) - 0x3000) | \
 			     ((x & 0xff0000) - 0x300000))
@@ -65,8 +68,18 @@ static VOID fb_draw_circle_points(INTN x_center, INTN y_center,
 	fb_put_pixel_with_dithering(x_center - y, y_center - x, color);
 }
 
+VOID EFIAPI fb_set_inverted(BOOLEAN inv)
+{
+	inverted = inv;
+}
+
+VOID EFIAPI fb_set_color(UINT32 c)
+{
+	color = c;
+}
+
 /*
- * Params are x, y of the center, + radius
+i * Params are x, y of the center, + radius
  */
 VOID EFIAPI fb_draw_circle(UINTN x, UINTN y, UINTN radius, UINT32 color)
 {
@@ -126,8 +139,35 @@ VOID EFIAPI fb_draw_lcd_pixel(UINTN x, UINTN y, UINT32 color)
 	}
 }
 
+static inline CHAR8 fb_get_inv(CHAR8 c)
+{
+	return inverted ? ~c : c;
+}
+
+VOID EFIAPI fb_draw_gfx_glyph(INTN x, INTN y, unsigned char *c, INTN w, INTN h)
+{
+	int xc, ef = x + w;
+	int bp = 0;
+	char ch = fb_get_inv(*c);
+
+	while (h--) {
+		for (xc = x; xc < ef; xc++) {
+			fb[y * scan_line + xc] =
+				(ch & (0x80 >> bp)) ? color : 0;
+			if (++bp == 8) {
+				bp = 0;
+				ch = fb_get_inv(*++c);
+			}
+		}
+		y++;
+	}
+}
+
 VOID EFIAPI fb_init(IN EFI_GRAPHICS_OUTPUT_PROTOCOL *gop)
 {
 	fb = (UINT32 *)(UINTN)gop->Mode->FrameBufferBase;
 	scan_line = gop->Mode->Info->PixelsPerScanLine;
+
+	color = 0x00efefff;
+
 }

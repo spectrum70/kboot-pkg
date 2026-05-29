@@ -34,6 +34,7 @@
   src/cpu.c
   src/memory.c
   src/utils.c
+  src/fonts.c
   src/fb.c
   src/firmware.c
 
@@ -68,5 +69,6 @@
   gEfiLoadFile2ProtocolGuid
   gEfiSmbiosProtocolGuid
   gEfiFormBrowser2ProtocolGuid
+  gEfiHiiFontProtocolGuid
 
 [Binaries.common]

@@ -38,6 +38,7 @@
 #include "fb.h"
 #include "firmware.h"
 #include "fs.h"
+#include "fonts.h"
 #include "loader.h"
 #include "log.h"
 #include "memory.h"
@@ -49,7 +50,7 @@
 
 #define MAX_LCD_COLS	320
 
-#define MENU_START_ROW	16
+#define MENU_START_Y	650
 #define MENU_X_COL	7
 
 #define LCD_CHAR_ROWS	7
@@ -74,6 +75,38 @@ static int prog_step_chars;
 static int inverted;
 
 static EFI_LOCK  p_lock;
+
+#include <Uefi.h>
+#include <Library/UefiBootServicesTableLib.h>
+#include <Protocol/HiiFont.h>
+
+EFI_STATUS render_string_to_bitmap(IN EFI_GRAPHICS_OUTPUT_PROTOCOL *gop, CHAR16 *str)
+{
+	EFI_IMAGE_OUTPUT direct_screen;
+	EFI_STATUS status;
+	EFI_HII_FONT_PROTOCOL *hii_font;
+	EFI_HII_OUT_FLAGS flags = EFI_HII_DIRECT_TO_SCREEN;
+	EFI_IMAGE_OUTPUT *blt = &direct_screen; // NULL triggers auto-allocation
+
+	direct_screen.Width = gop->Mode->Info->HorizontalResolution;
+	direct_screen.Height = gop->Mode->Info->VerticalResolution;
+	direct_screen.Image.Screen = gop;
+
+	status = gBS->LocateProtocol(&gEfiHiiFontProtocolGuid,
+				     NULL, (VOID **)&hii_font);
+	if (EFI_ERROR(status)) {
+		log(L"ERROR");
+		return status;
+	}
+	// Use default system font/colors by passing NULL for StringInfo
+	status = hii_font->StringToImage(hii_font, flags, str, NULL, &blt,
+					 0, 0, NULL, NULL, NULL);
+	if (!EFI_ERROR(status)) {
+		// Rendered data is in Blt->Image.Bitmap
+		// Caller is responsible for freeing Blt and Blt->Image.Bitmap
+	}
+	return status;
+}
 
 VOID menu_set_osind_and_reset()
 {
@@ -246,17 +279,13 @@ VOID menu_entries_display(struct fs_file_details entries[MAX_BOOT_ENTRIES])
 	while (entries[i].device_handle) {
 		CHAR16 *name;
 
-		menu_set_lcd_pos(0, MENU_START_ROW + i);
+		fonts_set_pos(0, MENU_START_Y + i * 52);
 
 		status = menu_get_name(entries[i].path_name, &name);
 		if (!EFI_ERROR(status)) {
 
-
-			AsciiSPrint(line, MAX_LCD_COLS, " [");
-			line[2] = (i == selected) ? '*' : ' ';
-
-			AsciiSPrint(&line[3], MAX_LCD_COLS,
-				"] %04d-%02d-%02d %02d:%02d:%02d  %s",
+			AsciiSPrint(line, MAX_LCD_COLS,
+				" %04d-%02d-%02d %02d:%02d:%02d  %s",
 				entries[i].creation_time.Year,
 				entries[i].creation_time.Month,
 				entries[i].creation_time.Day,
@@ -267,9 +296,9 @@ VOID menu_entries_display(struct fs_file_details entries[MAX_BOOT_ENTRIES])
 			);
 
 			EfiAcquireLock(&p_lock);
-			inverted = (i == selected) ? 1 : 0;
-			menu_print_line(line);
-			inverted = 0;
+			fonts_set_color((i == selected) ?
+					0x00dfdf00 : 0x00dfdfdf);
+			fonts_print_str(line);
 			EfiReleaseLock(&p_lock);
 		}
 
@@ -368,24 +397,31 @@ EFI_STATUS menu_setup_header(VOID)
 
 	menu_print_line("");
 	menu_print_line(" v.%a - (c) 2026, Kernelspace", version);
-	menu_print_line("");
-	menu_print_line("");
+
+	fonts_set_pos(0, 360);
+
 	cpu_get_cpu_id(line);
-	menu_print_line(" CPU: %a", line);
+	fonts_print_str(" CPU: ");
+	fonts_print_str(line);
+	fonts_print_str("\n");
+
 	status = memory_get_total(&total_memory);
 	if (EFI_ERROR(status))
 		return status;
 
 	utils_print_size_buff(line, total_memory, P_MEGA);
-	menu_print_line(" Total memory: %a", line);
+	fonts_print_str(" Total memory: ");
+	fonts_print_str(line);
+	fonts_print_str("\n");
+
 	status = firmware_get_mb_info(fw_info);
 	if (EFI_ERROR(status))
 		return status;
+	fonts_print_str(" Firmware name/version: ");
+	fonts_print_str(fw_info);
+	fonts_print_str("\n\n");
 
-	menu_print_line(" Firmware name/version: %a", fw_info);
-	menu_print_line("");
-	menu_print_line(" Select image to boot ...");
-	menu_print_line("");
+	fonts_print_str(" Select image to boot ...\n\n");
 
 	menu_set_lcd_pos(0, lcd_line_rows - 2);
 	menu_print_line(" F1 Power off    %aF3 Reboot",
@@ -413,6 +449,7 @@ EFI_STATUS menu_exec(IN EFI_HANDLE img_handle)
 	EfiInitializeLock(&p_lock, TPL_CALLBACK);
 
 	fb_init(gop);
+	fonts_init();
 
 	status = menu_get_pixel_size(gop, &p_width, &p_height);
 	if (EFI_ERROR(status))
@@ -448,6 +485,7 @@ EFI_STATUS menu_exec(IN EFI_HANDLE img_handle)
 
 	for(;;) {
 		menu_entries_display(entries);
+
 		menu_read_key(&key);
 		switch (key.ScanCode) {
 		case 1:
@@ -459,8 +497,9 @@ EFI_STATUS menu_exec(IN EFI_HANDLE img_handle)
 				selected++;
 			break;
 		case 0:
-			menu_set_lcd_pos(0, MENU_START_ROW + total_entries + 5);
-			menu_print_line("     Loading kernel ...");
+			fonts_set_pos(0, MENU_START_Y +
+				      total_entries * 52 + 50);
+			fonts_print_str("     Loading kernel ...");
 			status = loader_load_linux_kernel(img_handle,
 					entries[selected].path_name);
 			if (EFI_ERROR(status)) {
