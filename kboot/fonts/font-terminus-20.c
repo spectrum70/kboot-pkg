@@ -1004,5 +1004,5 @@ const gfx_font terminus_20pt = {
     (gfx_glyph *)f_glyphs,
     0x20,
     0xFF,
-    44
+    42
 };

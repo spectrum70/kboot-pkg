@@ -297,7 +297,7 @@ VOID menu_entries_display(struct fs_file_details entries[MAX_BOOT_ENTRIES])
 
 			EfiAcquireLock(&p_lock);
 			fonts_set_color((i == selected) ?
-					0x00dfdf00 : 0x00dfdfdf);
+					0x00efef00 : 0x003f3f3f);
 			fonts_print_str(line);
 			EfiReleaseLock(&p_lock);
 		}
