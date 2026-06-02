@@ -279,7 +279,7 @@ VOID menu_entries_display(struct fs_file_details entries[MAX_BOOT_ENTRIES])
 	while (entries[i].device_handle) {
 		CHAR16 *name;
 
-		fonts_set_pos(0, MENU_START_Y + i * 52);
+		fonts_set_pos(0, MENU_START_Y + i * 44);
 
 		status = menu_get_name(entries[i].path_name, &name);
 		if (!EFI_ERROR(status)) {
@@ -498,7 +498,7 @@ EFI_STATUS menu_exec(IN EFI_HANDLE img_handle)
 			break;
 		case 0:
 			fonts_set_pos(0, MENU_START_Y +
-				      total_entries * 52 + 50);
+				      total_entries * 44 + 50);
 			fonts_print_str("     Loading kernel ...");
 			status = loader_load_linux_kernel(img_handle,
 					entries[selected].path_name);
