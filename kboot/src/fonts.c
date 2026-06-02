@@ -25,7 +25,7 @@
 #include "fb.h"
 #include "log.h"
 
-#include "font_terminus.c"
+#include "font-terminus-20.c"
 
 static int cursor_x;
 static int cursor_y;
@@ -34,7 +34,7 @@ static const gfx_font *font;
 
 VOID EFIAPI fonts_init(VOID)
 {
-	font = &terminus_24pt;
+	font = &terminus_20pt;
 }
 
 VOID EFIAPI fonts_set_color(UINT32 c)
