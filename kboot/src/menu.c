@@ -31,6 +31,7 @@
 #include <Protocol/FirmwareManagement.h>
 #include <Protocol/FormBrowser2.h>
 #include <Protocol/GraphicsOutput.h>
+#include <Protocol/HiiImage.h>
 #include <Protocol/LockBox.h>
 #include <Protocol/SimpleTextOut.h>
 
@@ -72,9 +73,9 @@ static int lcd_cursor_row;
 
 static int countdown = 15;
 static int prog_step_chars;
-static int inverted;
 
-static EFI_LOCK  p_lock;
+static EFI_LOCK p_lock;
+static EFI_IMAGE_OUTPUT direct_screen;
 
 #include <Uefi.h>
 #include <Library/UefiBootServicesTableLib.h>
@@ -82,15 +83,10 @@ static EFI_LOCK  p_lock;
 
 EFI_STATUS render_string_to_bitmap(IN EFI_GRAPHICS_OUTPUT_PROTOCOL *gop, CHAR16 *str)
 {
-	EFI_IMAGE_OUTPUT direct_screen;
 	EFI_STATUS status;
 	EFI_HII_FONT_PROTOCOL *hii_font;
 	EFI_HII_OUT_FLAGS flags = EFI_HII_DIRECT_TO_SCREEN;
 	EFI_IMAGE_OUTPUT *blt = &direct_screen; // NULL triggers auto-allocation
-
-	direct_screen.Width = gop->Mode->Info->HorizontalResolution;
-	direct_screen.Height = gop->Mode->Info->VerticalResolution;
-	direct_screen.Image.Screen = gop;
 
 	status = gBS->LocateProtocol(&gEfiHiiFontProtocolGuid,
 				     NULL, (VOID **)&hii_font);
@@ -191,11 +187,6 @@ EFI_STATUS menu_show_lcd_char(UINTN xpos, UINTN ypos, UINTN c)
 	UINT32 orange = 0x00ffa500;
 	UINT32 dark = 0x00070707;
 
-	if (inverted) {
-		UINT32 temp = orange;
-		orange = dark, dark = temp;
-	}
-
 	for (i = 0, y = ypos; i < LCD_CHAR_ROWS; ++i, y += LCD_PIXEL_STEP) {
 		x = xpos;
 		fb_draw_lcd_pixel(x, y, lcd_n[c][i] & 16 ? orange : dark);
@@ -263,7 +254,7 @@ VOID EFIAPI menu_print_line(IN CONST CHAR8 *msg, ...)
 	CHAR8 line[MAX_LCD_COLS] = {0};
 	VA_LIST list;
 
-	VA_START(list, msg);
+   	VA_START(list, msg);
 	AsciiVSPrint(line, MAX_LCD_COLS, msg, list);
 	VA_END(list);
 
@@ -278,11 +269,19 @@ VOID menu_entries_display(struct fs_file_details entries[MAX_BOOT_ENTRIES])
 
 	while (entries[i].device_handle) {
 		CHAR16 *name;
+		UINTN pos = MENU_START_Y + i * 42;
 
-		fonts_set_pos(0, MENU_START_Y + i * 44);
+		fonts_set_pos(0, pos);
 
 		status = menu_get_name(entries[i].path_name, &name);
 		if (!EFI_ERROR(status)) {
+			UINT32 r_color;
+
+			r_color = (i == selected) ? 0x00808080 : 0;
+			fb_draw_rect(direct_screen.Image.Screen, 0, pos - 30,
+				     direct_screen.Width, pos + 8, r_color);
+			if (i == selected)
+			fb_set_bg_color(0x00808080);
 
 			AsciiSPrint(line, MAX_LCD_COLS,
 				" %04d-%02d-%02d %02d:%02d:%02d  %s",
@@ -298,8 +297,12 @@ VOID menu_entries_display(struct fs_file_details entries[MAX_BOOT_ENTRIES])
 			EfiAcquireLock(&p_lock);
 			fonts_set_color((i == selected) ?
 					0x00efef00 : 0x003f3f3f);
+			fb_set_bg_color((i == selected) ? r_color : 0);
+
 			fonts_print_str(line);
 			EfiReleaseLock(&p_lock);
+
+			fb_set_bg_color(0x00000000);
 		}
 
 		i++;
@@ -447,6 +450,10 @@ EFI_STATUS menu_exec(IN EFI_HANDLE img_handle)
 		return status;
 
 	EfiInitializeLock(&p_lock, TPL_CALLBACK);
+
+        direct_screen.Width = gop->Mode->Info->HorizontalResolution;
+        direct_screen.Height = gop->Mode->Info->VerticalResolution;
+        direct_screen.Image.Screen = gop;
 
 	fb_init(gop);
 	fonts_init();

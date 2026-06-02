@@ -29,8 +29,7 @@
 
 static UINT32 *fb;
 static UINT32 scan_line;
-static UINT32 color;
-static BOOLEAN inverted;
+static UINT32 color, bg_color;
 
 #define diether_border_d(x) (((x & 0xff) + 0x15) | ((x & 0xff00) - 0x3000) | \
 			     ((x & 0xff0000) - 0x300000))
@@ -68,9 +67,9 @@ static VOID fb_draw_circle_points(INTN x_center, INTN y_center,
 	fb_put_pixel_with_dithering(x_center - y, y_center - x, color);
 }
 
-VOID EFIAPI fb_set_inverted(BOOLEAN inv)
+VOID EFIAPI fb_set_bg_color(UINT32 c)
 {
-	inverted = inv;
+	bg_color = c;
 }
 
 VOID EFIAPI fb_set_color(UINT32 c)
@@ -103,8 +102,7 @@ VOID EFIAPI fb_draw_circle(UINTN x, UINTN y, UINTN radius, UINT32 color)
 }
 
 VOID EFIAPI fb_draw_line(IN EFI_GRAPHICS_OUTPUT_PROTOCOL *gop,
-			 INTN x0, INTN y0, INTN x1, INTN y1,
-			 EFI_GRAPHICS_OUTPUT_BLT_PIXEL color)
+			 INTN x0, INTN y0, INTN x1, INTN y1, UINT32 color)
 {
 	INTN dx = ABS(x1 - x0), sx = x0 < x1 ? 1 : -1;
 	INTN dy = -ABS(y1 - y0), sy = y0 < y1 ? 1 : -1;
@@ -112,12 +110,25 @@ VOID EFIAPI fb_draw_line(IN EFI_GRAPHICS_OUTPUT_PROTOCOL *gop,
 
 	while (TRUE) {
 		// Write pixel to GOP FrameBuffer at (x0, y0)e;
-		fb[y0 * scan_line + x0] = *(UINT32*)&color;
+		fb[y0 * scan_line + x0] = color;
 
 		if (x0 == x1 && y0 == y1) break;
 		e2 = 2 * err;
 		if (e2 >= dy) { err += dy; x0 += sx; }
 		if (e2 <= dx) { err += dx; y0 += sy; }
+	}
+}
+
+VOID EFIAPI fb_draw_rect(IN EFI_GRAPHICS_OUTPUT_PROTOCOL *gop,
+			 INTN x0, INTN y0, INTN x1, INTN y1, UINT32 color)
+{
+	INTN x, y;
+
+	for (y = y0; y < y1; ++y) {
+		for (x = x0; x < x1; ++x) {
+			// Write pixel to GOP FrameBuffer at (x0, y0)e;
+			fb[y * scan_line + x] = color;
+		}
 	}
 }
 
@@ -139,24 +150,18 @@ VOID EFIAPI fb_draw_lcd_pixel(UINTN x, UINTN y, UINT32 color)
 	}
 }
 
-static inline CHAR8 fb_get_inv(CHAR8 c)
-{
-	return inverted ? ~c : c;
-}
-
 VOID EFIAPI fb_draw_gfx_glyph(INTN x, INTN y, unsigned char *c, INTN w, INTN h)
 {
 	int xc, ef = x + w;
 	int bp = 0;
-	char ch = fb_get_inv(*c);
 
 	while (h--) {
 		for (xc = x; xc < ef; xc++) {
 			fb[y * scan_line + xc] =
-				(ch & (0x80 >> bp)) ? color : 0;
+				(*c & (0x80 >> bp)) ? color : bg_color;
 			if (++bp == 8) {
 				bp = 0;
-				ch = fb_get_inv(*++c);
+				c++;
 			}
 		}
 		y++;

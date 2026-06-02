@@ -7,9 +7,11 @@ VOID EFIAPI fb_init(IN EFI_GRAPHICS_OUTPUT_PROTOCOL *gop);
 VOID EFIAPI fb_draw_lcd_pixel(UINTN x, UINTN y, UINT32 color);
 VOID EFIAPI fb_draw_circle(UINTN x, UINTN y, UINTN radius, UINT32 color);
 VOID EFIAPI fb_draw_line(IN EFI_GRAPHICS_OUTPUT_PROTOCOL *gop,
-			 INTN x0, INTN y0, INTN x1, INTN y1,
-			 EFI_GRAPHICS_OUTPUT_BLT_PIXEL color);
+			 INTN x0, INTN y0, INTN x1, INTN y1, UINT32 color);
+VOID EFIAPI fb_draw_rect(IN EFI_GRAPHICS_OUTPUT_PROTOCOL *gop,
+			 INTN x0, INTN y0, INTN x1, INTN y1, UINT32 color);
 VOID EFIAPI fb_set_inverted(BOOLEAN inv);
 VOID EFIAPI fb_set_color(UINT32 c);
+VOID EFIAPI fb_set_bg_color(UINT32 c);
 VOID EFIAPI fb_draw_gfx_glyph(INTN x, INTN y, unsigned char *c, INTN w, INTN h);
 #endif /* fb_h */
