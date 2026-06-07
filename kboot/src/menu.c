@@ -205,8 +205,8 @@ EFI_STATUS menu_show_lcd_char(UINTN xpos, UINTN ypos, UINTN c)
 
 EFI_STATUS menu_load_bitmap(OUT VOID **bmp_data, OUT UINTN *bmp_size)
 {
-	return fs_load_bmp(L"\\EFI\\kboot\\images\\kboot.bmp",
-			   bmp_data, bmp_size);
+	return fs_load_file(L"\\EFI\\kboot\\images\\kboot.bmp",
+			    bmp_data, bmp_size);
 }
 
 EFI_STATUS menu_get_name(IN CHAR16 *path_name, OUT CHAR16 **ptr)

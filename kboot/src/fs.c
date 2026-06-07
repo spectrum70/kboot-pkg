@@ -251,7 +251,7 @@ EFI_STATUS fs_get_boot_entries(IN EFI_HANDLE efi_handle,
 	return EFI_SUCCESS;
 }
 
-EFI_STATUS fs_load_bmp(IN CHAR16 *name, OUT VOID **buffer, OUT UINTN *size)
+EFI_STATUS fs_load_file(IN CHAR16 *name, OUT VOID **buffer, OUT UINTN *size)
 {
 	EFI_STATUS  status;
 	EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *fs;
