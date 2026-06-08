@@ -36,6 +36,7 @@
 
 #include <Guid/FileInfo.h>
 
+#include "fs.h"
 #include "log.h"
 
 #define MAX_CMD_LINE		2048
@@ -119,13 +120,6 @@ EFI_STATUS loader_load_initramfs(IN CHAR16 *file_name)
 	dbg(__func__, L"all ok, initrd_size %d", initrd_size);
 
 	return status;
-}
-
-EFI_STATUS loader_load_cmdline_opts(CHAR16 *cmdline)
-{
-	/* Load options string */
-
-	return EFI_SUCCESS;
 }
 
 EFI_STATUS loader_load_rootfs_uuid(IN EFI_HANDLE part_handle, CHAR16 *uuid)
@@ -238,6 +232,35 @@ exit_found:
 }
 
 
+EFI_STATUS loader_load_cmdline(CHAR16 *cmd_line_args)
+{
+	EFI_STATUS status;
+	UINTN size;
+	CHAR8 *cmd_line_args_ascii;
+	CHAR8 *ptr;
+
+	status = fs_load_file(L"\\EFI\\kboot\\cmdline\\cmdline-args",
+			      (VOID **)&cmd_line_args_ascii, &size);
+	if (EFI_ERROR(status))
+		return status;
+
+	ptr = cmd_line_args_ascii;
+
+	while (size--) {
+		if (*ptr == '\n' || *ptr == '\a') {
+			*ptr = 0;
+			break;
+		}
+		ptr++;
+	}
+
+	UnicodeSPrint(cmd_line_args, MAX_CMD_LINE * sizeof(CHAR16),
+		      L"%a", cmd_line_args_ascii);
+
+	return status;
+
+}
+
 EFI_STATUS EFIAPI loader_load_linux_kernel(IN EFI_HANDLE efi_handle,
 					   IN CHAR16 *img_file_path)
 {
@@ -245,7 +268,8 @@ EFI_STATUS EFIAPI loader_load_linux_kernel(IN EFI_HANDLE efi_handle,
 	EFI_HANDLE handle_kernel;
 	EFI_LOADED_IMAGE_PROTOCOL *loaded_image, *kernel_loaded_image;
 	EFI_DEVICE_PATH_PROTOCOL *file_path;
-	CHAR16 cmd_line[MAX_CMD_LINE];
+	CHAR16 cmd_line[MAX_CMD_LINE] = {0};
+	CHAR16 cmd_line_args[MAX_CMD_LINE] = {0};
 	CHAR16 uuid[MAX_UUID_LEN] = {0};
 
 	status = gBS->HandleProtocol(efi_handle, &gEfiLoadedImageProtocolGuid,
@@ -281,14 +305,22 @@ EFI_STATUS EFIAPI loader_load_linux_kernel(IN EFI_HANDLE efi_handle,
 		    status);
 	}
 
-	/* CMDLINE composition now */
+
 	StrCpyS(cmd_line, MAX_CMD_LINE, L"root=UUID=");
 	StrCatS(cmd_line, MAX_CMD_LINE, uuid);
+	StrCatS(cmd_line, MAX_CMD_LINE, L" ");
 
-	/* TODO: read from file */
-	StrCatS(cmd_line, MAX_CMD_LINE, L" rw nouveau.debug=info nouveau.config=NvGspRm=1 nouveau.runpm=0 init=/usr/local/bin/sysghost initrd=initramfs");
+	/* CMDLINE composition now */
+	status = loader_load_cmdline(cmd_line_args);
+	if (EFI_ERROR(status)) {
+		/* Setting defaults */
+		StrCatS(cmd_line, MAX_CMD_LINE, L"rw quiet");
+	} else {
+		StrCatS(cmd_line, MAX_CMD_LINE, cmd_line_args);
+	}
 
 	/* Connecting remaining name of initramfs, come from vmlinux[8] */
+	StrCatS(cmd_line, MAX_CMD_LINE, L" initrd=initramfs");
 	StrCatS(cmd_line, MAX_CMD_LINE, &img_file_path[8]);
 	StrCatS(cmd_line, MAX_CMD_LINE, L".img");
 
