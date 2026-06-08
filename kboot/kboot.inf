@@ -70,5 +70,6 @@
   gEfiSmbiosProtocolGuid
   gEfiFormBrowser2ProtocolGuid
   gEfiHiiFontProtocolGuid
+  gEfiDiskIoProtocolGuid
 
 [Binaries.common]

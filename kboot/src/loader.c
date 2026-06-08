@@ -1,4 +1,3 @@
-
 /*
  * kboot - kernelspace bootloader
  *
@@ -26,14 +25,26 @@
 #include <Library/BaseMemoryLib.h>
 #include <Library/DevicePathLib.h>
 #include <Library/MemoryAllocationLib.h>
+#include <Library/PrintLib.h>
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/UefiLib.h>
+#include <Protocol/BlockIo.h>
+#include <Protocol/DiskIo.h>
 #include <Protocol/LoadedImage.h>
 #include <Protocol/LoadFile2.h>
 #include <Protocol/SimpleFileSystem.h>
+
 #include <Guid/FileInfo.h>
 
 #include "log.h"
+
+#define MAX_CMD_LINE		2048
+#define MAX_UUID_LEN		64
+
+#define EXT4_SUPERBLOCK_OFFSET	1024
+#define EXT4_UUID_OFFSET	104
+#define EXT4_MAGIC_NUMBER	0xef53
+#define EXT4_MAGIC_OFFSET	56
 
 VOID *initrd_data;
 UINTN initrd_size;
@@ -110,6 +121,123 @@ EFI_STATUS loader_load_initramfs(IN CHAR16 *file_name)
 	return status;
 }
 
+EFI_STATUS loader_load_cmdline_opts(CHAR16 *cmdline)
+{
+	/* Load options string */
+
+	return EFI_SUCCESS;
+}
+
+EFI_STATUS loader_load_rootfs_uuid(IN EFI_HANDLE part_handle, CHAR16 *uuid)
+{
+	EFI_STATUS status;
+	EFI_DISK_IO_PROTOCOL *disk_io;
+	EFI_BLOCK_IO_PROTOCOL *block_io;
+	UINT8 tmp_uuid[32] = {0};
+	UINT16 magic;
+	CHAR16 *ptr;
+
+	status = gBS->HandleProtocol(part_handle, &gEfiDiskIoProtocolGuid,
+				     (VOID **)&disk_io);
+	if (EFI_ERROR(status)) {
+		err(L"\ndisk io protocol: %r", status);
+		return status;
+	}
+
+	status = gBS->HandleProtocol(part_handle, &gEfiBlockIoProtocolGuid,
+				     (VOID **)&block_io);
+	if (EFI_ERROR(status)) {
+		err(L"\nblock io protocol: %r", status);
+		return status;
+	}
+
+	/* Check for EXT4 */
+	status = disk_io->ReadDisk(disk_io, block_io->Media->MediaId,
+				   (UINT64)
+				   (EXT4_SUPERBLOCK_OFFSET + EXT4_MAGIC_OFFSET),
+				   sizeof(UINT16), &magic);
+	if (EFI_ERROR(status)) {
+		err(L"\ngetting uuid: %r", status);
+		return status;
+	}
+
+	if (magic != EXT4_MAGIC_NUMBER)
+		return EFI_UNSUPPORTED;
+
+	status = disk_io->ReadDisk(disk_io, block_io->Media->MediaId,
+				   (UINT64)
+				   (EXT4_SUPERBLOCK_OFFSET + EXT4_UUID_OFFSET),
+				   16, tmp_uuid);
+	if (EFI_ERROR(status)) {
+		err(L"\ngetting uuid: %r", status);
+		return status;
+	}
+
+	UnicodeSPrint(uuid, MAX_UUID_LEN * sizeof(CHAR16), 
+		      L"%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-"
+		       "%02x%02x%02x%02x%02x%02x",
+		      tmp_uuid[0], tmp_uuid[1], tmp_uuid[2], tmp_uuid[3],
+		      tmp_uuid[4], tmp_uuid[5],
+		      tmp_uuid[6], tmp_uuid[7],
+		      tmp_uuid[8], tmp_uuid[9],
+		      tmp_uuid[10], tmp_uuid[11], tmp_uuid[12],
+		      tmp_uuid[13], tmp_uuid[14], tmp_uuid[15]);
+
+	ptr = uuid;
+	while (*ptr) {
+		if (*ptr >= L'A' && *ptr <= L'F')
+			*ptr += (L'a' - L'A');
+		ptr++;
+	}
+
+	return EFI_SUCCESS;
+}
+
+EFI_STATUS loader_find_rootfs_uuid(IN EFI_HANDLE efi_handle, CHAR16 *uuid)
+{
+	EFI_STATUS status;
+	EFI_HANDLE *handle_buffer;
+	EFI_DEVICE_PATH_PROTOCOL *device_path;
+	UINTN handle_count;
+
+	status = gBS->LocateHandleBuffer(ByProtocol,
+					 &gEfiBlockIoProtocolGuid,
+					 NULL,
+					 &handle_count,
+					 &handle_buffer);
+	if (EFI_ERROR(status)) {
+		err(L"\nlocating handle buffer: %r", status);
+		return status;
+	}
+
+	status = EFI_NOT_FOUND;
+
+	for (UINTN i = 0; i < handle_count; ++i) {
+		device_path = DevicePathFromHandle(handle_buffer[i]);
+		if (device_path == NULL)
+			continue;
+		while (!IsDevicePathEnd(device_path)) {
+			if ((DevicePathType(device_path) ==
+				MEDIA_DEVICE_PATH) &&
+			    (DevicePathSubType(device_path) ==
+				MEDIA_HARDDRIVE_DP)) {
+
+				status = loader_load_rootfs_uuid(
+					handle_buffer[i], uuid);
+				if (!EFI_ERROR(status))
+					goto exit_found;
+			}
+			device_path = NextDevicePathNode(device_path);
+		}
+	}
+
+exit_found:
+	FreePool(handle_buffer);
+
+	return status;
+}
+
+
 EFI_STATUS EFIAPI loader_load_linux_kernel(IN EFI_HANDLE efi_handle,
 					   IN CHAR16 *img_file_path)
 {
@@ -117,6 +245,8 @@ EFI_STATUS EFIAPI loader_load_linux_kernel(IN EFI_HANDLE efi_handle,
 	EFI_HANDLE handle_kernel;
 	EFI_LOADED_IMAGE_PROTOCOL *loaded_image, *kernel_loaded_image;
 	EFI_DEVICE_PATH_PROTOCOL *file_path;
+	CHAR16 cmd_line[MAX_CMD_LINE];
+	CHAR16 uuid[MAX_UUID_LEN] = {0};
 
 	status = gBS->HandleProtocol(efi_handle, &gEfiLoadedImageProtocolGuid,
 				    (VOID **)&loaded_image);
@@ -145,9 +275,22 @@ EFI_STATUS EFIAPI loader_load_linux_kernel(IN EFI_HANDLE efi_handle,
 		return status;
 	}
 
-	CHAR16 cmd_line[1024] = L"root=UUID=f946efca-0772-4336-a76c-eaa3e2b4f6d0 rw nouveau.debug=info nouveau.config=NvGspRm=1 nouveau.runpm=0 init=/usr/local/bin/sysghost initrd=initramfs";
-	StrCatS(cmd_line, 1024, &img_file_path[8]);
-	StrCatS(cmd_line, 1024, L".img");
+	status = loader_find_rootfs_uuid(efi_handle, uuid);
+	if (EFI_ERROR(status)) {
+		err(L"\nloader_find_rootfs_uuid failed to fined ext4 uuid %r",
+		    status);
+	}
+
+	/* CMDLINE composition now */
+	StrCpyS(cmd_line, MAX_CMD_LINE, L"root=UUID=");
+	StrCatS(cmd_line, MAX_CMD_LINE, uuid);
+
+	/* TODO: read from file */
+	StrCatS(cmd_line, MAX_CMD_LINE, L" rw nouveau.debug=info nouveau.config=NvGspRm=1 nouveau.runpm=0 init=/usr/local/bin/sysghost initrd=initramfs");
+
+	/* Connecting remaining name of initramfs, come from vmlinux[8] */
+	StrCatS(cmd_line, MAX_CMD_LINE, &img_file_path[8]);
+	StrCatS(cmd_line, MAX_CMD_LINE, L".img");
 
 	status = gBS->HandleProtocol(handle_kernel,
 		    &gEfiLoadedImageProtocolGuid, (VOID**)&kernel_loaded_image);
